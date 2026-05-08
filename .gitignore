@@ -1,0 +1,19 @@
+# Visual Studio / .NET
+.vs/
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build and publish output
+publish/
+TestResults/
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user

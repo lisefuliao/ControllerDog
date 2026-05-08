@@ -1,0 +1,35 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Color x:Key="BackgroundColor">#FFF7FA</Color>
+    <Color x:Key="CardColor">#FFFFFF</Color>
+    <Color x:Key="PrimaryColor">#F4A7B9</Color>
+    <Color x:Key="AccentColor">#E985A3</Color>
+    <Color x:Key="TextPrimaryColor">#2B2B2B</Color>
+    <Color x:Key="TextSecondaryColor">#777777</Color>
+    <Color x:Key="BorderColor">#F2D5DD</Color>
+    <Color x:Key="SoftPinkColor">#FDE9EF</Color>
+    <Color x:Key="PressedColor">#D96F90</Color>
+    <Color x:Key="DisabledColor">#E8DDE1</Color>
+    <Color x:Key="SuccessColor">#5DAA77</Color>
+    <Color x:Key="WarningColor">#C58A3A</Color>
+
+    <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
+    <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
+    <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
+    <SolidColorBrush x:Key="BorderBrushSoft" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="SoftPinkBrush" Color="{StaticResource SoftPinkColor}" />
+    <SolidColorBrush x:Key="PressedBrush" Color="{StaticResource PressedColor}" />
+    <SolidColorBrush x:Key="DisabledBrush" Color="{StaticResource DisabledColor}" />
+    <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+    <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+
+    <DropShadowEffect x:Key="SoftShadow"
+                      BlurRadius="18"
+                      ShadowDepth="2"
+                      Direction="270"
+                      Opacity="0.12"
+                      Color="#7A3044" />
+</ResourceDictionary>

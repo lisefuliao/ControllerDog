@@ -1,0 +1,33 @@
+{
+  "pollingRateHz": 1000,
+  "inputMode": "Auto",
+  "mappings": [
+    {
+      "id": "default-l2-right-button",
+      "sourceButton": "LT / L2",
+      "target": {
+        "kind": "Mouse",
+        "value": "RightButton"
+      },
+      "isEnabled": true
+    },
+    {
+      "id": "default-r2-left-button",
+      "sourceButton": "RT / R2",
+      "target": {
+        "kind": "Mouse",
+        "value": "LeftButton"
+      },
+      "isEnabled": true
+    },
+    {
+      "id": "default-menu-m",
+      "sourceButton": "Back / Share / Create",
+      "target": {
+        "kind": "Keyboard",
+        "value": "M"
+      },
+      "isEnabled": true
+    }
+  ]
+}
