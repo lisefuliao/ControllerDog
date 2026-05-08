@@ -6,10 +6,11 @@ namespace DouDouDeDou.Services;
 public sealed class XInputControllerService
 {
     private const byte TriggerThreshold = 30;
+    private const uint MaxUserIndex = 4;
 
     public bool TryGetFirstConnectedState(out ControllerState state)
     {
-        for (uint index = 0; index < 4; index++)
+        for (uint index = 0; index < MaxUserIndex; index++)
         {
             if (TryGetState(index, out state))
             {
@@ -18,6 +19,21 @@ public sealed class XInputControllerService
         }
 
         state = new ControllerState();
+        return false;
+    }
+
+    public bool TryGetFirstConnectedIndex(out uint userIndex)
+    {
+        for (uint index = 0; index < MaxUserIndex; index++)
+        {
+            if (XInput.GetState(index, out _))
+            {
+                userIndex = index;
+                return true;
+            }
+        }
+
+        userIndex = 0;
         return false;
     }
 
@@ -52,13 +68,11 @@ public sealed class XInputControllerService
         if (gamepad.LeftTrigger >= TriggerThreshold)
         {
             pressed.Add("LT");
-            pressed.Add("L2");
         }
 
         if (gamepad.RightTrigger >= TriggerThreshold)
         {
             pressed.Add("RT");
-            pressed.Add("R2");
         }
 
         state = new ControllerState
@@ -68,8 +82,6 @@ public sealed class XInputControllerService
             ControllerType = ControllerType.XInput,
             InputMode = "XInput",
             XInputUserIndex = (int)userIndex,
-            UsagePage = 0x01,
-            Usage = 0x05,
             PressedButtons = pressed,
             Timestamp = DateTimeOffset.Now,
             RawSummary = $"LT={gamepad.LeftTrigger}, RT={gamepad.RightTrigger}, Buttons={buttons}"

@@ -18,7 +18,6 @@
 
   <ItemGroup>
     <None Include="config.default.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="README.md" CopyToOutputDirectory="Never" />
     <None Include="Assets\Svg\*.svg" CopyToOutputDirectory="Never" />
   </ItemGroup>
 </Project>

@@ -32,6 +32,12 @@
                                FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextPrimaryBrush}" />
                 </Border>
 
+                <Border x:Name="ButtonTouchpad" Canvas.Left="136" Canvas.Top="74" Width="68" Height="16" CornerRadius="7"
+                        Background="#F9EDF1" BorderBrush="{StaticResource BorderBrushSoft}" BorderThickness="1">
+                    <TextBlock x:Name="LabelTouchpad" Text="Touch" HorizontalAlignment="Center" VerticalAlignment="Center"
+                               FontWeight="SemiBold" FontSize="8" Foreground="{StaticResource TextPrimaryBrush}" />
+                </Border>
+
                 <Ellipse x:Name="ButtonDPadUp" Canvas.Left="78" Canvas.Top="99" Width="22" Height="22"
                          Fill="#F9EDF1" Stroke="{StaticResource BorderBrushSoft}" StrokeThickness="1" />
                 <Ellipse x:Name="ButtonDPadDown" Canvas.Left="78" Canvas.Top="141" Width="22" Height="22"
@@ -45,6 +51,11 @@
                          Fill="#F6E2E9" Stroke="{StaticResource BorderBrushSoft}" StrokeThickness="2" />
                 <Ellipse x:Name="ButtonRightStick" Canvas.Left="180" Canvas.Top="126" Width="34" Height="34"
                          Fill="#F6E2E9" Stroke="{StaticResource BorderBrushSoft}" StrokeThickness="2" />
+
+                <Ellipse x:Name="ButtonGuide" Canvas.Left="161" Canvas.Top="116" Width="18" Height="18"
+                         Fill="#F9EDF1" Stroke="{StaticResource BorderBrushSoft}" StrokeThickness="1" />
+                <TextBlock x:Name="LabelGuide" Canvas.Left="165" Canvas.Top="117" Text="G" FontWeight="SemiBold"
+                           FontSize="10" Foreground="{StaticResource TextPrimaryBrush}" />
 
                 <Border x:Name="ButtonBack" Canvas.Left="136" Canvas.Top="92" Width="34" Height="18" CornerRadius="8"
                         Background="#F9EDF1" BorderBrush="{StaticResource BorderBrushSoft}" BorderThickness="1">

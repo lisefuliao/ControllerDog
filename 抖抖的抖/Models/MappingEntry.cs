@@ -12,11 +12,6 @@ public sealed class MappingEntry : INotifyPropertyChanged
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public MappingEntry()
-    {
-        _target.PropertyChanged += OnTargetPropertyChanged;
-    }
-
     public string Id
     {
         get => _id;
@@ -32,19 +27,7 @@ public sealed class MappingEntry : INotifyPropertyChanged
     public InputTarget Target
     {
         get => _target;
-        set
-        {
-            if (ReferenceEquals(_target, value))
-            {
-                return;
-            }
-
-            _target.PropertyChanged -= OnTargetPropertyChanged;
-            _target = value;
-            _target.PropertyChanged += OnTargetPropertyChanged;
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Target)));
-            RaiseTargetDisplayChanges();
-        }
+        set => SetField(ref _target, value);
     }
 
     public bool IsEnabled
@@ -52,10 +35,6 @@ public sealed class MappingEntry : INotifyPropertyChanged
         get => _isEnabled;
         set => SetField(ref _isEnabled, value);
     }
-
-    public string TargetDisplayName => Target.DisplayName;
-
-    public string OutputTypeDisplayName => Target.Kind == InputTargetKind.Mouse ? "鼠标" : "键盘";
 
     public MappingEntry Clone()
     {
@@ -78,16 +57,5 @@ public sealed class MappingEntry : INotifyPropertyChanged
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         return true;
-    }
-
-    private void OnTargetPropertyChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        RaiseTargetDisplayChanges();
-    }
-
-    private void RaiseTargetDisplayChanges()
-    {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(TargetDisplayName)));
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(OutputTypeDisplayName)));
     }
 }

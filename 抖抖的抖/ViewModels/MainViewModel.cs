@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -25,6 +26,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly MappingEngine _mappingEngine;
     private readonly WatchdogService _watchdogService;
     private readonly DispatcherTimer _deviceMonitorTimer;
+    private readonly DispatcherTimer _uiRefreshTimer;
+    private readonly object _pendingUiGate = new();
     private readonly Dictionary<string, DateTimeOffset> _lastLogTimes = new(StringComparer.OrdinalIgnoreCase);
 
     private PollingRateOption _selectedPollingRate = PollingRateOption.Defaults.First(x => x.Hertz == 1000);
@@ -34,16 +37,14 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private string _inputModeText = "Auto";
     private string _connectionStatusText = "未连接";
     private string _currentPollingRateText = "1000 Hz";
-    private string _vidPidText = "N/A";
-    private string _usageText = "N/A";
     private string _actualFrequencyText = "0 Hz";
     private string _averageLatencyText = "0.000 ms";
     private string _exceptionCountText = "0";
     private string _antiStickyStatusText = "待机";
     private string _mappingStatusText = "未开始";
     private bool _isMappingRunning;
-    private long _lastUiRefreshTicks;
-    private int _uiRefreshPending;
+    private ControllerState? _pendingUiState;
+    private int _uiRefreshScheduled;
 
     public MainViewModel()
     {
@@ -63,6 +64,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         AddMappingCommand = new RelayCommand(_ => AddMapping());
         DeleteMappingCommand = new RelayCommand(DeleteMapping, x => x is MappingEntry);
         EditMappingCommand = new RelayCommand(EditMapping, x => x is MappingEntry);
+        SelectSourceButtonCommand = new RelayCommand(SelectSourceButton, x => x is string);
 
         Mappings.CollectionChanged += OnMappingsChanged;
 
@@ -82,12 +84,21 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         };
         _deviceMonitorTimer.Tick += (_, _) =>
         {
-            if (!_controllerInputService.IsRunning)
+            if (IsUiRefreshAllowed())
             {
                 DetectControllerOnce();
             }
         };
         _deviceMonitorTimer.Start();
+
+        _uiRefreshTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _uiRefreshTimer.Tick += (_, _) => FlushUiRefresh();
+        _uiRefreshTimer.Start();
+
+        _controllerInputService.Start();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -112,9 +123,12 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         "A", "B", "X", "Y",
         "LB / L1", "RB / R1", "LT / L2", "RT / R2",
         "Back / Share / Create", "Start / Options",
+        "PS", "Touchpad",
         "LeftStick", "RightStick",
         "DPadUp", "DPadDown", "DPadLeft", "DPadRight",
-        "Button13", "Button14", "Button15", "Button16"
+        "Button13", "Button14", "Button15", "Button16",
+        "Button17", "Button18", "Button19", "Button20",
+        "Button21", "Button22", "Button23", "Button24"
     ];
 
     public ObservableCollection<MappingEntry> Mappings { get; } = new();
@@ -137,6 +151,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand EditMappingCommand { get; }
 
+    public ICommand SelectSourceButtonCommand { get; }
+
     public PollingRateOption SelectedPollingRate
     {
         get => _selectedPollingRate;
@@ -150,7 +166,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _selectedPollingRate = value;
             CurrentPollingRateText = value.DisplayName;
             _controllerInputService.SetPollingRate(value.Hertz);
-            AutoSaveConfig();
             OnPropertyChanged();
         }
     }
@@ -189,18 +204,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _currentPollingRateText;
         set => SetField(ref _currentPollingRateText, value);
-    }
-
-    public string VidPidText
-    {
-        get => _vidPidText;
-        set => SetField(ref _vidPidText, value);
-    }
-
-    public string UsageText
-    {
-        get => _usageText;
-        set => SetField(ref _usageText, value);
     }
 
     public string ActualFrequencyText
@@ -274,8 +277,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ControllerTypeText = info.ControllerType.ToDisplayName();
         InputModeText = info.InputMode;
         ConnectionStatusText = info.IsConnected ? "已连接" : "未连接";
-        VidPidText = FormatVidPid(info.VendorId, info.ProductId);
-        UsageText = FormatUsage(info.UsagePage, info.Usage);
         PreviewControllerType = info.ControllerType;
     }
 
@@ -295,7 +296,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void StopMapping()
     {
         _watchdogService.Stop();
-        _controllerInputService.Stop();
         _mappingEngine.Stop();
         IsMappingRunning = false;
         MappingStatusText = "已停止";
@@ -332,7 +332,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
         AddLog($"配置已加载：{dialog.FileName}");
     }
 
@@ -345,7 +344,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             IsEnabled = true
         });
         ApplyMappingsToEngine();
-        AutoSaveConfig();
         AddLog("已添加一条映射，点击“编辑”选择输出目标。");
     }
 
@@ -359,39 +357,93 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Mappings.Remove(mapping);
         _mappingEngine.ReleaseAll("删除映射后刷新状态");
         ApplyMappingsToEngine();
-        AutoSaveConfig();
         AddLog($"已删除映射：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
     }
 
-    private void EditMapping(object? parameter)
+    private async void EditMapping(object? parameter)
     {
         if (parameter is not MappingEntry mapping)
         {
             return;
         }
 
-        var dialog = new InputCaptureDialog(mapping.Target.Clone())
-        {
-            Owner = Application.Current.MainWindow
-        };
+        var dialog = new InputCaptureDialog(mapping.Target.Clone());
+        var result = await dialog.ShowCaptureAsync(Application.Current.MainWindow);
 
-        if (dialog.ShowDialog() == true && dialog.SelectedTarget is not null)
+        if (result == true && dialog.SelectedTarget is not null)
         {
             mapping.Target = dialog.SelectedTarget.Clone();
             ApplyMappingsToEngine();
-            AutoSaveConfig();
             AddLog($"映射已更新：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
         }
+    }
+
+    private async void SelectSourceButton(object? parameter)
+    {
+        if (parameter is not string sourceButton || string.IsNullOrWhiteSpace(sourceButton))
+        {
+            return;
+        }
+
+        var mapping = FindMappingBySource(sourceButton);
+        var isNewMapping = false;
+        if (mapping is null)
+        {
+            mapping = new MappingEntry
+            {
+                SourceButton = sourceButton,
+                Target = new InputTarget { Kind = InputTargetKind.Keyboard, Value = "Space" },
+                IsEnabled = true
+            };
+            Mappings.Add(mapping);
+            isNewMapping = true;
+        }
+
+        var dialog = new InputCaptureDialog(mapping.Target.Clone());
+        var result = await dialog.ShowCaptureAsync(Application.Current.MainWindow);
+
+        if (result == true && dialog.SelectedTarget is not null)
+        {
+            mapping.SourceButton = sourceButton;
+            mapping.Target = dialog.SelectedTarget.Clone();
+            ApplyMappingsToEngine();
+            AddLog($"已设置映射：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
+            return;
+        }
+
+        if (isNewMapping)
+        {
+            Mappings.Remove(mapping);
+            ApplyMappingsToEngine();
+        }
+    }
+
+    private MappingEntry? FindMappingBySource(string sourceButton)
+    {
+        var requestedAliases = ControllerState.SplitAliases(sourceButton);
+        return Mappings.FirstOrDefault(mapping =>
+        {
+            var mappingAliases = ControllerState.SplitAliases(mapping.SourceButton);
+            return mappingAliases.Any(alias => requestedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase));
+        });
     }
 
     private void OnStateReceived(object? sender, ControllerState state)
     {
         _mappingEngine.HandleState(state);
-        QueueUiRefresh(state);
+        if (IsUiRefreshAllowed())
+        {
+            QueueUiRefresh(state);
+        }
     }
 
     private void OnMetricsUpdated(object? sender, InputMetrics metrics)
     {
+        if (!IsUiRefreshAllowed())
+        {
+            return;
+        }
+
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
             ActualFrequencyText = $"{metrics.ActualFrequencyHz:F0} Hz";
@@ -402,30 +454,57 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void QueueUiRefresh(ControllerState state)
     {
-        var nowTicks = Environment.TickCount64;
-        if (nowTicks - _lastUiRefreshTicks < 17)
-        {
-            return;
-        }
-
-        _lastUiRefreshTicks = nowTicks;
-        if (Interlocked.Exchange(ref _uiRefreshPending, 1) == 1)
-        {
-            return;
-        }
-
         var snapshot = state.Clone();
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        lock (_pendingUiGate)
         {
-            try
+            _pendingUiState = snapshot;
+        }
+
+        if (Interlocked.Exchange(ref _uiRefreshScheduled, 1) == 0)
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                UpdateUiState(snapshot);
-            }
-            finally
+                try
+                {
+                    FlushUiRefresh();
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _uiRefreshScheduled, 0);
+                }
+            }), DispatcherPriority.Render);
+        }
+    }
+
+    private void FlushUiRefresh()
+    {
+        if (!IsUiRefreshAllowed())
+        {
+            lock (_pendingUiGate)
             {
-                Interlocked.Exchange(ref _uiRefreshPending, 0);
+                _pendingUiState = null;
             }
-        });
+
+            return;
+        }
+
+        ControllerState? snapshot;
+        lock (_pendingUiGate)
+        {
+            snapshot = _pendingUiState;
+            _pendingUiState = null;
+        }
+
+        snapshot ??= _controllerInputService.LatestState;
+        if (snapshot is not null)
+        {
+            UpdateUiState(snapshot);
+        }
+    }
+
+    private static bool IsUiRefreshAllowed()
+    {
+        return Application.Current.MainWindow?.IsActive == true;
     }
 
     private void UpdateUiState(ControllerState state)
@@ -434,15 +513,46 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ControllerTypeText = state.ControllerType.ToDisplayName();
         InputModeText = state.InputMode;
         ConnectionStatusText = state.IsConnected ? "已连接" : "未连接";
-        VidPidText = state.VidPidText;
-        UsageText = state.UsageText;
         PreviewControllerType = state.ControllerType;
 
         PressedButtonNames.Clear();
-        foreach (var button in state.GetPressedButtonsSnapshot())
+        foreach (var button in GetDisplayPressedButtons(state))
         {
             PressedButtonNames.Add(button);
         }
+    }
+
+    private static IReadOnlyList<string> GetDisplayPressedButtons(ControllerState state)
+    {
+        return state.GetPressedButtonsSnapshot()
+            .Select(button => ToControllerDisplayButton(state.ControllerType, button))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+    }
+
+    private static string ToControllerDisplayButton(ControllerType controllerType, string button)
+    {
+        if (controllerType is not (ControllerType.DualShock4 or ControllerType.DualSenseDse))
+        {
+            return button;
+        }
+
+        return button switch
+        {
+            "A" => "Cross",
+            "B" => "Circle",
+            "X" => "Square",
+            "Y" => "Triangle",
+            "LB" => "L1",
+            "RB" => "R1",
+            "LT" => "L2",
+            "RT" => "R2",
+            "Back" => controllerType == ControllerType.DualSenseDse ? "Create" : "Share",
+            "Start" => "Options",
+            "PS" => "PS",
+            _ => button
+        };
     }
 
     private MappingConfig BuildConfig()
@@ -491,7 +601,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
     }
 
     private void OnMappingPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -502,33 +611,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
-    }
-
-    private void AutoSaveConfig()
-    {
-        try
-        {
-            _configService.Save(BuildConfig());
-        }
-        catch (Exception ex)
-        {
-            AddLog($"自动保存失败：{ex.Message}");
-        }
-    }
-
-    private static string FormatVidPid(int? vendorId, int? productId)
-    {
-        return vendorId is null || productId is null
-            ? "N/A"
-            : $"VID_{vendorId.Value:X4} / PID_{productId.Value:X4}";
-    }
-
-    private static string FormatUsage(int? usagePage, int? usage)
-    {
-        return usagePage is null || usage is null
-            ? "N/A"
-            : $"0x{usagePage.Value:X2} / 0x{usage.Value:X2}";
     }
 
     private void AddLog(string message)
@@ -570,10 +652,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         _deviceMonitorTimer.Stop();
-        AutoSaveConfig();
+        _uiRefreshTimer.Stop();
         StopMapping();
-        _watchdogService.Dispose();
         _controllerInputService.Dispose();
+        _watchdogService.Dispose();
         _mappingEngine.Dispose();
         _hidControllerService.Dispose();
         _inputOutputService.ReleaseAllPhysical();

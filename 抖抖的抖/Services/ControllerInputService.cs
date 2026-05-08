@@ -12,6 +12,8 @@ public sealed record InputMetrics(
 
 public sealed class ControllerInputService : IDisposable
 {
+    private const int ButtonDebounceMilliseconds = 1;
+
     private readonly XInputControllerService _xInputControllerService;
     private readonly HidControllerService _hidControllerService;
     private readonly HighPrecisionTimer _timer = new();
@@ -22,7 +24,11 @@ public sealed class ControllerInputService : IDisposable
     private volatile int _pollingRateHz = 1000;
     private long _exceptionCount;
     private ControllerState _latestState = new();
+    private ControllerState? _lastPublishedState;
     private HashSet<string> _previousPressedButtons = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _stablePressedButtons = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _candidatePressedButtons = new(StringComparer.OrdinalIgnoreCase);
+    private long _candidateSinceTicks;
 
     public ControllerInputService(
         XInputControllerService xInputControllerService,
@@ -65,6 +71,7 @@ public sealed class ControllerInputService : IDisposable
             return;
         }
 
+        _lastPublishedState = null;
         _cts = new CancellationTokenSource();
         _thread = new Thread(() => PollLoop(_cts.Token))
         {
@@ -118,7 +125,7 @@ public sealed class ControllerInputService : IDisposable
                 }
 
                 latencyStopwatch.Restart();
-                var state = ApplyButtonStateMachine(ReadCurrentState());
+                var state = ApplyButtonStateMachine(ApplyButtonDebounce(ReadCurrentState()));
                 latencyStopwatch.Stop();
 
                 latencyAverage = latencyAverage <= 0
@@ -130,7 +137,12 @@ public sealed class ControllerInputService : IDisposable
                     _latestState = state.Clone();
                 }
 
-                StateReceived?.Invoke(this, state);
+                if (ShouldPublishState(state))
+                {
+                    _lastPublishedState = state.Clone();
+                    StateReceived?.Invoke(this, state);
+                }
+
                 loopCounter++;
 
                 if (metricsStopwatch.ElapsedMilliseconds >= 250)
@@ -175,6 +187,30 @@ public sealed class ControllerInputService : IDisposable
         };
     }
 
+    private ControllerState ApplyButtonDebounce(ControllerState state)
+    {
+        if (!state.IsConnected)
+        {
+            return state;
+        }
+
+        var nowTicks = Environment.TickCount64;
+        if (!state.PressedButtons.SetEquals(_candidatePressedButtons))
+        {
+            _candidatePressedButtons = new HashSet<string>(state.PressedButtons, StringComparer.OrdinalIgnoreCase);
+            _candidateSinceTicks = nowTicks;
+        }
+
+        if (_candidatePressedButtons.SetEquals(_stablePressedButtons)
+            || nowTicks - _candidateSinceTicks >= ButtonDebounceMilliseconds)
+        {
+            _stablePressedButtons = new HashSet<string>(_candidatePressedButtons, StringComparer.OrdinalIgnoreCase);
+        }
+
+        state.PressedButtons = new HashSet<string>(_stablePressedButtons, StringComparer.OrdinalIgnoreCase);
+        return state;
+    }
+
     private ControllerState ApplyButtonStateMachine(ControllerState state)
     {
         var phases = new Dictionary<string, ButtonPhase>(StringComparer.OrdinalIgnoreCase);
@@ -187,6 +223,8 @@ public sealed class ControllerInputService : IDisposable
             }
 
             _previousPressedButtons.Clear();
+            _stablePressedButtons.Clear();
+            _candidatePressedButtons.Clear();
             state.ButtonPhases = phases;
             return state;
         }
@@ -209,6 +247,39 @@ public sealed class ControllerInputService : IDisposable
         _previousPressedButtons = new HashSet<string>(state.PressedButtons, StringComparer.OrdinalIgnoreCase);
         state.ButtonPhases = phases;
         return state;
+    }
+
+    private bool ShouldPublishState(ControllerState state)
+    {
+        if (_lastPublishedState is null)
+        {
+            return true;
+        }
+
+        return state.IsConnected != _lastPublishedState.IsConnected
+               || state.ControllerType != _lastPublishedState.ControllerType
+               || state.XInputUserIndex != _lastPublishedState.XInputUserIndex
+               || !string.Equals(state.DeviceName, _lastPublishedState.DeviceName, StringComparison.OrdinalIgnoreCase)
+               || !state.PressedButtons.SetEquals(_lastPublishedState.PressedButtons)
+               || !DictionaryEquals(state.ButtonPhases, _lastPublishedState.ButtonPhases);
+    }
+
+    private static bool DictionaryEquals(Dictionary<string, ButtonPhase> left, Dictionary<string, ButtonPhase> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in left)
+        {
+            if (!right.TryGetValue(key, out var other) || other != value)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void Dispose()

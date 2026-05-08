@@ -7,13 +7,7 @@ public sealed record ControllerDetectionInfo(
     ControllerType ControllerType,
     string InputMode,
     bool IsConnected,
-    int? XInputIndex,
-    int? VendorId = null,
-    int? ProductId = null,
-    int? UsagePage = null,
-    int? Usage = null,
-    string DevicePath = "",
-    string Hint = "");
+    int? XInputIndex);
 
 public sealed class ControllerDetectionService
 {
@@ -30,20 +24,15 @@ public sealed class ControllerDetectionService
 
     public ControllerDetectionInfo DetectBest()
     {
-        if (_xInputControllerService.TryGetFirstConnectedState(out var xInputState))
+        if (_xInputControllerService.TryGetFirstConnectedIndex(out var xInputIndex)
+            && _xInputControllerService.TryGetState(xInputIndex, out var xInputState))
         {
             return new ControllerDetectionInfo(
                 xInputState.DeviceName,
                 xInputState.ControllerType,
                 xInputState.InputMode,
                 true,
-                xInputState.XInputUserIndex,
-                xInputState.VendorId,
-                xInputState.ProductId,
-                xInputState.UsagePage,
-                xInputState.Usage,
-                xInputState.DevicePath,
-                "XInput 优先");
+                xInputState.XInputUserIndex);
         }
 
         var hid = _hidControllerService.DetectFirstHid();

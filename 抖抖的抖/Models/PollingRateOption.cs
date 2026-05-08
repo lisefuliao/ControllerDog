@@ -17,6 +17,6 @@ public sealed class PollingRateOption
         new() { Hertz = 1000, DisplayName = "1000 Hz" },
         new() { Hertz = 2000, DisplayName = "2000 Hz" },
         new() { Hertz = 4000, DisplayName = "4000 Hz" },
-        new() { Hertz = 8000, DisplayName = "8000 Hz（实验）" }
+        new() { Hertz = 8000, DisplayName = "8000 Hz（有点军备竞赛了吧）" }
     ];
 }

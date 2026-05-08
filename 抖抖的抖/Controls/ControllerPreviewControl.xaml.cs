@@ -2,8 +2,10 @@ using System.Collections;
 using System.Collections.Specialized;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using DouDouDeDou.Models;
 using ControllerTypeModel = DouDouDeDou.Models.ControllerType;
 
@@ -25,20 +27,38 @@ public partial class ControllerPreviewControl : UserControl
             typeof(ControllerPreviewControl),
             new PropertyMetadata(null, OnPressedButtonsChanged));
 
+    public static readonly DependencyProperty ButtonCommandProperty =
+        DependencyProperty.Register(
+            nameof(ButtonCommand),
+            typeof(ICommand),
+            typeof(ControllerPreviewControl),
+            new PropertyMetadata(null));
+
     private readonly Brush _idleBrush = new SolidColorBrush(Color.FromRgb(249, 237, 241));
     private readonly Brush _triggerIdleBrush = new SolidColorBrush(Color.FromRgb(245, 225, 232));
     private readonly Brush _activeBrush = new SolidColorBrush(Color.FromRgb(233, 133, 163));
     private readonly Brush _disconnectedBrush = new SolidColorBrush(Color.FromRgb(231, 224, 227));
     private readonly Brush _textBrush = new SolidColorBrush(Color.FromRgb(43, 43, 43));
     private readonly Brush _activeTextBrush = Brushes.White;
+    private readonly DispatcherTimer _refreshTimer;
 
     private INotifyCollectionChanged? _observedPressedCollection;
+    private HashSet<string> _pendingPressedButtons = new(StringComparer.OrdinalIgnoreCase);
+    private ControllerTypeModel _pendingControllerType = ControllerTypeModel.None;
+    private bool _refreshRequested = true;
 
     public ControllerPreviewControl()
     {
         InitializeComponent();
-        UpdateLabels();
-        UpdateHighlights();
+        _refreshTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _refreshTimer.Tick += (_, _) => FlushPendingRefresh();
+        _refreshTimer.Start();
+        Unloaded += (_, _) => _refreshTimer.Stop();
+        RegisterButtonClicks();
+        RequestRefresh();
     }
 
     public ControllerTypeModel ControllerType
@@ -53,11 +73,16 @@ public partial class ControllerPreviewControl : UserControl
         set => SetValue(PressedButtonsProperty, value);
     }
 
+    public ICommand? ButtonCommand
+    {
+        get => (ICommand?)GetValue(ButtonCommandProperty);
+        set => SetValue(ButtonCommandProperty, value);
+    }
+
     private static void OnVisualStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (ControllerPreviewControl)d;
-        control.UpdateLabels();
-        control.UpdateHighlights();
+        control.RequestRefresh();
     }
 
     private static void OnPressedButtonsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -74,43 +99,116 @@ public partial class ControllerPreviewControl : UserControl
             control._observedPressedCollection.CollectionChanged += control.OnPressedCollectionChanged;
         }
 
-        control.UpdateHighlights();
+        control.RequestRefresh();
     }
 
     private void OnPressedCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        RequestRefresh();
+    }
+
+    private void RequestRefresh()
+    {
+        _pendingPressedButtons = GetPressedCanonicalButtons();
+        _pendingControllerType = ControllerType;
+        _refreshRequested = true;
+        if (Dispatcher.CheckAccess())
+        {
+            FlushPendingRefresh();
+            return;
+        }
+
+        Dispatcher.BeginInvoke(FlushPendingRefresh, DispatcherPriority.Render);
+    }
+
+    private void FlushPendingRefresh()
+    {
+        if (!_refreshRequested)
+        {
+            return;
+        }
+
+        _refreshRequested = false;
+        UpdateLabels();
         UpdateHighlights();
+    }
+
+    private void RegisterButtonClicks()
+    {
+        RegisterButton(ButtonA, "A");
+        RegisterButton(LabelA, "A");
+        RegisterButton(ButtonB, "B");
+        RegisterButton(LabelB, "B");
+        RegisterButton(ButtonX, "X");
+        RegisterButton(LabelX, "X");
+        RegisterButton(ButtonY, "Y");
+        RegisterButton(LabelY, "Y");
+        RegisterButton(ButtonLB, "LB / L1");
+        RegisterButton(ButtonRB, "RB / R1");
+        RegisterButton(ButtonLT, "LT / L2");
+        RegisterButton(ButtonRT, "RT / R2");
+        RegisterButton(ButtonBack, "Back / Share / Create");
+        RegisterButton(ButtonStart, "Start / Options");
+        RegisterButton(ButtonGuide, "PS");
+        RegisterButton(LabelGuide, "PS");
+        RegisterButton(ButtonTouchpad, "Touchpad");
+        RegisterButton(ButtonDPadUp, "DPadUp");
+        RegisterButton(ButtonDPadDown, "DPadDown");
+        RegisterButton(ButtonDPadLeft, "DPadLeft");
+        RegisterButton(ButtonDPadRight, "DPadRight");
+        RegisterButton(ButtonLeftStick, "LeftStick");
+        RegisterButton(ButtonRightStick, "RightStick");
+    }
+
+    private void RegisterButton(FrameworkElement element, string sourceButton)
+    {
+        element.Tag = sourceButton;
+        element.Cursor = Cursors.Hand;
+        element.ToolTip = $"点击设置 {sourceButton} 映射";
+        element.MouseLeftButtonUp += OnControllerButtonClick;
+    }
+
+    private void OnControllerButtonClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string sourceButton })
+        {
+            return;
+        }
+
+        var command = ButtonCommand;
+        if (string.Equals(sourceButton, "PS", StringComparison.OrdinalIgnoreCase)
+            && _pendingControllerType != ControllerTypeModel.DualShock4
+            && _pendingControllerType != ControllerTypeModel.DualSenseDse)
+        {
+            return;
+        }
+
+        if (command?.CanExecute(sourceButton) == true)
+        {
+            command.Execute(sourceButton);
+            e.Handled = true;
+        }
     }
 
     private void UpdateLabels()
     {
-        if (ControllerType == ControllerTypeModel.DualShock4)
+        var isPlayStation =
+            _pendingControllerType == ControllerTypeModel.DualShock4
+            || _pendingControllerType == ControllerTypeModel.DualSenseDse;
+
+        ButtonGuide.Visibility = isPlayStation ? Visibility.Visible : Visibility.Collapsed;
+        LabelGuide.Visibility = isPlayStation ? Visibility.Visible : Visibility.Collapsed;
+        ButtonTouchpad.Visibility = isPlayStation ? Visibility.Visible : Visibility.Collapsed;
+
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
         {
-            LabelA.Text = "×";
-            LabelB.Text = "○";
-            LabelX.Text = "□";
-            LabelY.Text = "△";
-            LabelLB.Text = "L1";
-            LabelRB.Text = "R1";
-            LabelLT.Text = "L2";
-            LabelRT.Text = "R2";
-            LabelBack.Text = "Share";
-            LabelStart.Text = "Options";
+            ApplyPlayStationLabels("Share");
             return;
         }
 
-        if (ControllerType == ControllerTypeModel.DualSenseDse)
+        if (_pendingControllerType == ControllerTypeModel.DualSenseDse)
         {
-            LabelA.Text = "×";
-            LabelB.Text = "○";
-            LabelX.Text = "□";
-            LabelY.Text = "△";
-            LabelLB.Text = "L1";
-            LabelRB.Text = "R1";
-            LabelLT.Text = "L2";
-            LabelRT.Text = "R2";
-            LabelBack.Text = "Create";
-            LabelStart.Text = "Options";
+            ApplyPlayStationLabels("Create");
             return;
         }
 
@@ -124,12 +222,30 @@ public partial class ControllerPreviewControl : UserControl
         LabelRT.Text = "RT";
         LabelBack.Text = "Back";
         LabelStart.Text = "Start";
+        LabelGuide.Text = "";
+        LabelTouchpad.Text = "Touch";
+    }
+
+    private void ApplyPlayStationLabels(string shareLabel)
+    {
+        LabelA.Text = "×";
+        LabelB.Text = "○";
+        LabelX.Text = "□";
+        LabelY.Text = "△";
+        LabelLB.Text = "L1";
+        LabelRB.Text = "R1";
+        LabelLT.Text = "L2";
+        LabelRT.Text = "R2";
+        LabelBack.Text = shareLabel;
+        LabelStart.Text = "Options";
+        LabelGuide.Text = "PS";
+        LabelTouchpad.Text = "Touch";
     }
 
     private void UpdateHighlights()
     {
-        var pressed = GetPressedCanonicalButtons();
-        var disconnected = ControllerType == ControllerTypeModel.None;
+        var pressed = _pendingPressedButtons;
+        var disconnected = _pendingControllerType == ControllerTypeModel.None;
 
         BodyPath.Fill = disconnected ? Brushes.WhiteSmoke : new SolidColorBrush(Color.FromRgb(255, 253, 254));
         SetShape(ButtonA, LabelA, pressed.Contains("A"), disconnected);
@@ -142,6 +258,8 @@ public partial class ControllerPreviewControl : UserControl
         SetBorder(ButtonRT, LabelRT, pressed.Contains("RT"), disconnected, _triggerIdleBrush);
         SetBorder(ButtonBack, LabelBack, pressed.Contains("Back"), disconnected, _idleBrush);
         SetBorder(ButtonStart, LabelStart, pressed.Contains("Start"), disconnected, _idleBrush);
+        SetShape(ButtonGuide, LabelGuide, pressed.Contains("PS"), disconnected);
+        SetBorder(ButtonTouchpad, LabelTouchpad, pressed.Contains("Touchpad"), disconnected, _idleBrush);
         SetShape(ButtonDPadUp, null, pressed.Contains("DPadUp"), disconnected);
         SetShape(ButtonDPadDown, null, pressed.Contains("DPadDown"), disconnected);
         SetShape(ButtonDPadLeft, null, pressed.Contains("DPadLeft"), disconnected);
