@@ -1,3 +1,4 @@
+using System.Reflection;
 using DouDouDeDou.Models;
 using HidSharp;
 
@@ -8,8 +9,7 @@ public sealed class HidControllerService : IDisposable
     private readonly object _gate = new();
     private HidDevice? _device;
     private HidStream? _stream;
-    private ControllerType _controllerType = ControllerType.None;
-    private string _deviceName = "未检测到 HID 手柄";
+    private HidDeviceInfo? _deviceInfo;
     private DateTimeOffset _lastScan = DateTimeOffset.MinValue;
     private HashSet<string> _lastPressedButtons = new(StringComparer.OrdinalIgnoreCase);
 
@@ -20,39 +20,29 @@ public sealed class HidControllerService : IDisposable
             state = new ControllerState();
 
             EnsureDevice();
-            if (_device is null || _stream is null)
+            if (_device is null || _stream is null || _deviceInfo is null)
             {
                 return false;
             }
 
             try
             {
-                var buffer = new byte[Math.Max(8, _device.GetMaxInputReportLength())];
+                var buffer = new byte[Math.Max(16, _device.GetMaxInputReportLength())];
                 var length = _stream.Read(buffer, 0, buffer.Length);
-                if (length <= 0)
+                if (length > 0)
                 {
-                    return BuildCurrentState(out state, "HID 空闲");
+                    var report = buffer.AsSpan(0, length);
+                    _lastPressedButtons = ParseButtons(report, _deviceInfo);
                 }
 
-                var pressed = ParseButtons(buffer.AsSpan(0, length), _controllerType);
-                _lastPressedButtons = new HashSet<string>(pressed, StringComparer.OrdinalIgnoreCase);
-                state = new ControllerState
-                {
-                    IsConnected = true,
-                    DeviceName = _deviceName,
-                    ControllerType = _controllerType,
-                    InputMode = "HID",
-                    PressedButtons = pressed,
-                    Timestamp = DateTimeOffset.Now,
-                    RawSummary = $"HID Report {length} bytes"
-                };
-
+                state = BuildState(length > 0 ? $"HID Report {length} bytes" : "HID 空闲");
                 return true;
             }
             catch (TimeoutException)
             {
-                // HID 读取超时不等于断开，沿用上一次报告，等待设备发送释放报告。
-                return BuildCurrentState(out state, "HID 等待新报告");
+                // HID 常见行为是“状态变化才发报告”，轮询超时不等于断开。
+                state = BuildState("HID 等待新报告");
+                return true;
             }
             catch
             {
@@ -64,79 +54,138 @@ public sealed class HidControllerService : IDisposable
 
     public ControllerDetectionInfo? DetectFirstHid()
     {
-        foreach (var device in DeviceList.Local.GetHidDevices())
+        var info = FindBestDeviceInfo();
+        if (info is null)
         {
-            var productName = SafeGetProductName(device);
-            var type = Classify(device.VendorID, device.ProductID, productName);
-            if (type == ControllerType.None)
-            {
-                continue;
-            }
-
-            return new ControllerDetectionInfo(
-                DeviceName: BuildDeviceName(device),
-                ControllerType: type,
-                InputMode: "HID",
-                IsConnected: true,
-                XInputIndex: null);
+            return null;
         }
 
-        return null;
+        return new ControllerDetectionInfo(
+            DeviceName: info.DisplayName,
+            ControllerType: info.ControllerType,
+            InputMode: "HID",
+            IsConnected: true,
+            XInputIndex: null,
+            VendorId: info.VendorId,
+            ProductId: info.ProductId,
+            UsagePage: info.UsagePage,
+            Usage: info.Usage,
+            DevicePath: info.DevicePath,
+            Hint: info.MatchReason);
     }
 
-    private bool BuildCurrentState(out ControllerState state, string summary)
+    private ControllerState BuildState(string summary)
     {
-        state = new ControllerState
+        var info = _deviceInfo!;
+        return new ControllerState
         {
             IsConnected = true,
-            DeviceName = _deviceName,
-            ControllerType = _controllerType,
+            DeviceName = info.DisplayName,
+            ControllerType = info.ControllerType,
             InputMode = "HID",
+            VendorId = info.VendorId,
+            ProductId = info.ProductId,
+            UsagePage = info.UsagePage,
+            Usage = info.Usage,
+            DevicePath = info.DevicePath,
             PressedButtons = new HashSet<string>(_lastPressedButtons, StringComparer.OrdinalIgnoreCase),
             Timestamp = DateTimeOffset.Now,
             RawSummary = summary
         };
-
-        return true;
     }
 
     private void EnsureDevice()
     {
-        if (_stream is not null && _device is not null)
+        if (_stream is not null && _device is not null && _deviceInfo is not null)
         {
             return;
         }
 
-        if ((DateTimeOffset.Now - _lastScan).TotalSeconds < 1)
+        if ((DateTimeOffset.Now - _lastScan).TotalMilliseconds < 500)
         {
             return;
         }
 
         _lastScan = DateTimeOffset.Now;
-        foreach (var device in DeviceList.Local.GetHidDevices())
+        var info = FindBestDeviceInfo();
+        if (info is null)
         {
-            var productName = SafeGetProductName(device);
-            var type = Classify(device.VendorID, device.ProductID, productName);
-            if (type == ControllerType.None)
-            {
-                continue;
-            }
-
-            if (!device.TryOpen(out var stream))
-            {
-                continue;
-            }
-
-            stream.ReadTimeout = 1;
-            _device = device;
-            _stream = stream;
-            _controllerType = type;
-            _deviceName = BuildDeviceName(device);
             return;
         }
+
+        if (!info.Device.TryOpen(out var stream))
+        {
+            return;
+        }
+
+        stream.ReadTimeout = 1;
+        _device = info.Device;
+        _stream = stream;
+        _deviceInfo = info;
+        _lastPressedButtons.Clear();
     }
 
-    private static ControllerType Classify(int vendorId, int productId, string productName)
+    private static HidDeviceInfo? FindBestDeviceInfo()
+    {
+        return DeviceList.Local
+            .GetHidDevices()
+            .Select(BuildDeviceInfo)
+            .Where(x => x.Score > 0)
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+    }
+
+    private static HidDeviceInfo BuildDeviceInfo(HidDevice device)
+    {
+        var productName = SafeGetProductName(device);
+        var manufacturer = SafeGetManufacturer(device);
+        var devicePath = SafeGetDevicePath(device);
+        var usage = DetectUsage(device);
+        var controllerType = Classify(device.VendorID, device.ProductID, productName, usage);
+        var usageLooksLikeController = usage.IsGameController;
+        var knownVidPid = controllerType is ControllerType.DualShock4 or ControllerType.DualSenseDse;
+
+        var score = 0;
+        var reason = "未匹配";
+        if (usageLooksLikeController)
+        {
+            score += 80;
+            reason = "HID Usage 识别为游戏控制器";
+        }
+
+        if (knownVidPid)
+        {
+            score += 40;
+            reason = "Sony VID/PID + HID";
+        }
+
+        if (NameLooksLikeController(productName))
+        {
+            score += 10;
+            reason = usageLooksLikeController ? reason : "设备名称像手柄";
+        }
+
+        var name = string.IsNullOrWhiteSpace(productName) ? "HID 手柄" : productName;
+        if (!string.IsNullOrWhiteSpace(manufacturer) && !name.Contains(manufacturer, StringComparison.OrdinalIgnoreCase))
+        {
+            name = $"{manufacturer} {name}";
+        }
+
+        return new HidDeviceInfo(
+            Device: device,
+            DisplayName: $"{name} VID_{device.VendorID:X4}&PID_{device.ProductID:X4}",
+            ControllerType: controllerType == ControllerType.None ? ControllerType.UnknownHid : controllerType,
+            VendorId: device.VendorID,
+            ProductId: device.ProductID,
+            UsagePage: usage.UsagePage,
+            Usage: usage.Usage,
+            DevicePath: devicePath,
+            Score: score,
+            MatchReason: reason);
+    }
+
+    private static ControllerType Classify(int vendorId, int productId, string productName, HidUsageInfo usage)
     {
         var name = productName ?? string.Empty;
 
@@ -153,50 +202,114 @@ public sealed class HidControllerService : IDisposable
             }
         }
 
-        if (name.Contains("gamepad", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("controller", StringComparison.OrdinalIgnoreCase)
-            || name.Contains("joystick", StringComparison.OrdinalIgnoreCase))
-        {
-            return ControllerType.UnknownHid;
-        }
-
-        return ControllerType.None;
+        return usage.IsGameController || NameLooksLikeController(name)
+            ? ControllerType.UnknownHid
+            : ControllerType.None;
     }
 
-    private static HashSet<string> ParseButtons(ReadOnlySpan<byte> report, ControllerType type)
+    private static HidUsageInfo DetectUsage(HidDevice device)
     {
-        return type switch
+        try
+        {
+            var descriptor = device.GetReportDescriptor();
+            var deviceItems = GetEnumerableProperty(descriptor, "DeviceItems");
+            foreach (var item in deviceItems)
+            {
+                foreach (var usage in GetEnumerableProperty(item, "Usages"))
+                {
+                    var page = ReadIntProperty(usage, "Page", "UsagePage");
+                    var id = ReadIntProperty(usage, "Id", "Usage", "UsageId");
+                    if (page is null || id is null)
+                    {
+                        continue;
+                    }
+
+                    if (page == 0x01 && id is 0x04 or 0x05 or 0x08)
+                    {
+                        return new HidUsageInfo(page.Value, id.Value, true);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // 有些设备描述符读取会失败，后续仍可走 VID/PID 与名称辅助识别。
+        }
+
+        return new HidUsageInfo(null, null, false);
+    }
+
+    private static IEnumerable<object> GetEnumerableProperty(object source, string propertyName)
+    {
+        var value = source.GetType().GetProperty(propertyName, BindingFlags.Instance | BindingFlags.Public)?.GetValue(source);
+        return value is System.Collections.IEnumerable enumerable
+            ? enumerable.Cast<object>()
+            : [];
+    }
+
+    private static int? ReadIntProperty(object source, params string[] propertyNames)
+    {
+        foreach (var name in propertyNames)
+        {
+            var value = source.GetType().GetProperty(name, BindingFlags.Instance | BindingFlags.Public)?.GetValue(source);
+            if (value is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                return Convert.ToInt32(value);
+            }
+            catch
+            {
+                // ignore and try next property
+            }
+        }
+
+        return null;
+    }
+
+    private static HashSet<string> ParseButtons(ReadOnlySpan<byte> report, HidDeviceInfo info)
+    {
+        return info.ControllerType switch
         {
             ControllerType.DualSenseDse => ParseDualSense(report),
             ControllerType.DualShock4 => ParseDualShock4(report),
-            _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            _ => ParseGenericController(report)
         };
     }
 
     private static HashSet<string> ParseDualShock4(ReadOnlySpan<byte> report)
     {
         var pressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (report.Length < 8)
+        if (report.Length < 7)
         {
             return pressed;
         }
 
-        var face = report[5];
-        AddDPad(face, pressed);
-        AddIf((face & 0x10) != 0, "X", "Square", "□", pressed);
-        AddIf((face & 0x20) != 0, "A", "Cross", "×", pressed);
-        AddIf((face & 0x40) != 0, "B", "Circle", "○", pressed);
-        AddIf((face & 0x80) != 0, "Y", "Triangle", "△", pressed);
+        var offset = report[0] is 0x01 or 0x11 ? 1 : 0;
+        if (report.Length <= offset + 6)
+        {
+            return pressed;
+        }
 
-        var shoulder = report[6];
-        AddIf((shoulder & 0x01) != 0, "LB", "L1", pressed);
-        AddIf((shoulder & 0x02) != 0, "RB", "R1", pressed);
-        AddIf((shoulder & 0x04) != 0, "LT", "L2", pressed);
-        AddIf((shoulder & 0x08) != 0, "RT", "R2", pressed);
-        AddIf((shoulder & 0x10) != 0, "Back", "Share", pressed);
-        AddIf((shoulder & 0x20) != 0, "Start", "Options", pressed);
-        AddIf((shoulder & 0x40) != 0, "LeftStick", pressed);
-        AddIf((shoulder & 0x80) != 0, "RightStick", pressed);
+        var face = report[offset + 5];
+        AddDPad(face, pressed);
+        AddIf((face & 0x10) != 0, pressed, "X", "Square", "□");
+        AddIf((face & 0x20) != 0, pressed, "A", "Cross", "×");
+        AddIf((face & 0x40) != 0, pressed, "B", "Circle", "○");
+        AddIf((face & 0x80) != 0, pressed, "Y", "Triangle", "△");
+
+        var shoulder = report[offset + 6];
+        AddIf((shoulder & 0x01) != 0, pressed, "LB", "L1");
+        AddIf((shoulder & 0x02) != 0, pressed, "RB", "R1");
+        AddIf((shoulder & 0x04) != 0, pressed, "LT", "L2");
+        AddIf((shoulder & 0x08) != 0, pressed, "RT", "R2");
+        AddIf((shoulder & 0x10) != 0, pressed, "Back", "Share");
+        AddIf((shoulder & 0x20) != 0, pressed, "Start", "Options");
+        AddIf((shoulder & 0x40) != 0, pressed, "LeftStick");
+        AddIf((shoulder & 0x80) != 0, pressed, "RightStick");
         return pressed;
     }
 
@@ -217,19 +330,72 @@ public sealed class HidControllerService : IDisposable
 
         var face = report[faceIndex];
         AddDPad(face, pressed);
-        AddIf((face & 0x10) != 0, "X", "Square", "□", pressed);
-        AddIf((face & 0x20) != 0, "A", "Cross", "×", pressed);
-        AddIf((face & 0x40) != 0, "B", "Circle", "○", pressed);
-        AddIf((face & 0x80) != 0, "Y", "Triangle", "△", pressed);
+        AddIf((face & 0x10) != 0, pressed, "X", "Square", "□");
+        AddIf((face & 0x20) != 0, pressed, "A", "Cross", "×");
+        AddIf((face & 0x40) != 0, pressed, "B", "Circle", "○");
+        AddIf((face & 0x80) != 0, pressed, "Y", "Triangle", "△");
 
         var shoulder = report[shoulderIndex];
-        AddIf((shoulder & 0x01) != 0, "LB", "L1", pressed);
-        AddIf((shoulder & 0x02) != 0, "RB", "R1", pressed);
-        AddIf((shoulder & 0x04) != 0, "LT", "L2", pressed);
-        AddIf((shoulder & 0x08) != 0, "RT", "R2", pressed);
-        AddIf((shoulder & 0x10) != 0, "Back", "Create", pressed);
-        AddIf((shoulder & 0x20) != 0, "Start", "Options", pressed);
+        AddIf((shoulder & 0x01) != 0, pressed, "LB", "L1");
+        AddIf((shoulder & 0x02) != 0, pressed, "RB", "R1");
+        AddIf((shoulder & 0x04) != 0, pressed, "LT", "L2");
+        AddIf((shoulder & 0x08) != 0, pressed, "RT", "R2");
+        AddIf((shoulder & 0x10) != 0, pressed, "Back", "Create");
+        AddIf((shoulder & 0x20) != 0, pressed, "Start", "Options");
+        AddIf((shoulder & 0x40) != 0, pressed, "LeftStick");
+        AddIf((shoulder & 0x80) != 0, pressed, "RightStick");
         return pressed;
+    }
+
+    private static HashSet<string> ParseGenericController(ReadOnlySpan<byte> report)
+    {
+        var pressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (report.Length < 3)
+        {
+            return pressed;
+        }
+
+        var buttonBytes = report[^Math.Min(3, report.Length)..];
+        var bitIndex = 0;
+        foreach (var b in buttonBytes)
+        {
+            for (var i = 0; i < 8; i++)
+            {
+                if ((b & (1 << i)) != 0)
+                {
+                    AddGenericButton(bitIndex, pressed);
+                }
+
+                bitIndex++;
+            }
+        }
+
+        return pressed;
+    }
+
+    private static void AddGenericButton(int bitIndex, ISet<string> pressed)
+    {
+        string[] aliases = bitIndex switch
+        {
+            0 => ["A"],
+            1 => ["B"],
+            2 => ["X"],
+            3 => ["Y"],
+            4 => ["LB", "L1"],
+            5 => ["RB", "R1"],
+            6 => ["LT", "L2"],
+            7 => ["RT", "R2"],
+            8 => ["Back", "Share", "Create"],
+            9 => ["Start", "Options"],
+            10 => ["LeftStick"],
+            11 => ["RightStick"],
+            _ => [$"Button{bitIndex + 1}"]
+        };
+
+        foreach (var alias in aliases)
+        {
+            pressed.Add(alias);
+        }
     }
 
     private static void AddDPad(byte face, ISet<string> pressed)
@@ -267,31 +433,26 @@ public sealed class HidControllerService : IDisposable
         }
     }
 
-    private static void AddIf(bool condition, string button, ISet<string> pressed)
+    private static void AddIf(bool condition, ISet<string> pressed, params string[] names)
     {
-        if (condition)
+        if (!condition)
         {
-            pressed.Add(button);
+            return;
+        }
+
+        foreach (var name in names)
+        {
+            pressed.Add(name);
         }
     }
 
-    private static void AddIf(bool condition, string button1, string button2, ISet<string> pressed)
+    private static bool NameLooksLikeController(string productName)
     {
-        if (condition)
-        {
-            pressed.Add(button1);
-            pressed.Add(button2);
-        }
-    }
-
-    private static void AddIf(bool condition, string button1, string button2, string button3, ISet<string> pressed)
-    {
-        if (condition)
-        {
-            pressed.Add(button1);
-            pressed.Add(button2);
-            pressed.Add(button3);
-        }
+        return productName.Contains("gamepad", StringComparison.OrdinalIgnoreCase)
+               || productName.Contains("controller", StringComparison.OrdinalIgnoreCase)
+               || productName.Contains("joystick", StringComparison.OrdinalIgnoreCase)
+               || productName.Contains("dualshock", StringComparison.OrdinalIgnoreCase)
+               || productName.Contains("dualsense", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string SafeGetProductName(HidDevice device)
@@ -306,11 +467,28 @@ public sealed class HidControllerService : IDisposable
         }
     }
 
-    private static string BuildDeviceName(HidDevice device)
+    private static string SafeGetManufacturer(HidDevice device)
     {
-        var productName = SafeGetProductName(device);
-        var name = string.IsNullOrWhiteSpace(productName) ? "HID 手柄" : productName;
-        return $"{name} VID_{device.VendorID:X4}&PID_{device.ProductID:X4}";
+        try
+        {
+            return device.GetManufacturer() ?? string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string SafeGetDevicePath(HidDevice device)
+    {
+        try
+        {
+            return device.GetType().GetProperty("DevicePath", BindingFlags.Instance | BindingFlags.Public)?.GetValue(device)?.ToString() ?? "";
+        }
+        catch
+        {
+            return "";
+        }
     }
 
     private void CloseStream()
@@ -318,8 +496,7 @@ public sealed class HidControllerService : IDisposable
         _stream?.Dispose();
         _stream = null;
         _device = null;
-        _controllerType = ControllerType.None;
-        _deviceName = "未检测到 HID 手柄";
+        _deviceInfo = null;
         _lastPressedButtons.Clear();
     }
 
@@ -330,4 +507,18 @@ public sealed class HidControllerService : IDisposable
             CloseStream();
         }
     }
+
+    private sealed record HidUsageInfo(int? UsagePage, int? Usage, bool IsGameController);
+
+    private sealed record HidDeviceInfo(
+        HidDevice Device,
+        string DisplayName,
+        ControllerType ControllerType,
+        int VendorId,
+        int ProductId,
+        int? UsagePage,
+        int? Usage,
+        string DevicePath,
+        int Score,
+        string MatchReason);
 }

@@ -63,7 +63,19 @@ public sealed class InputTarget : INotifyPropertyChanged
             "XButton2" => "鼠标侧键 2",
             _ => Value
         }
-        : $"{Value} 键";
+        : Value switch
+        {
+            "Space" => "空格",
+            "Enter" => "回车",
+            "Escape" => "Esc",
+            "LeftShift" => "左 Shift",
+            "LeftCtrl" => "左 Ctrl",
+            "LeftAlt" => "左 Alt",
+            "RightShift" => "右 Shift",
+            "RightCtrl" => "右 Ctrl",
+            "RightAlt" => "右 Alt",
+            _ => $"{Value} 键"
+        };
 
     [JsonIgnore]
     public string Signature => $"{Kind}:{Value}";

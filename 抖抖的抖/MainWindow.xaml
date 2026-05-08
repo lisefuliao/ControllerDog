@@ -3,20 +3,24 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:DouDouDeDou.Controls"
         Title="抖抖的抖"
-        Width="1380"
-        Height="840"
-        MinWidth="1180"
-        MinHeight="720"
+        Width="1480"
+        Height="920"
+        MinWidth="1260"
+        MinHeight="760"
         FontFamily="Microsoft YaHei UI"
-        Background="{StaticResource BackgroundBrush}">
-    <Grid Margin="22">
+        Background="{StaticResource BackgroundBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        TextOptions.TextFormattingMode="Display"
+        TextOptions.TextRenderingMode="ClearType">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Style="{StaticResource CardStyle}" Padding="16">
+        <Border Grid.Row="0" Style="{StaticResource CardStyle}" Padding="18">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -25,12 +29,29 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="抖抖的抖"
-                               FontSize="24"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,18,0" />
+                    <Border Width="42" Height="42" CornerRadius="14" Background="{StaticResource AccentBrush}" Margin="0,0,14,0">
+                        <TextBlock Text="抖"
+                                   Foreground="White"
+                                   FontWeight="Bold"
+                                   FontSize="22"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                    </Border>
+                    <StackPanel>
+                        <TextBlock Text="抖抖的抖"
+                                   FontSize="24"
+                                   FontWeight="Bold"
+                                   Foreground="{StaticResource TextPrimaryBrush}" />
+                        <TextBlock Text="本地手柄到键盘 / 鼠标一对一映射"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   FontSize="12" />
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
                     <Button Content="开始映射"
                             Command="{Binding StartMappingCommand}"
                             Style="{StaticResource PrimaryButtonStyle}"
@@ -53,7 +74,7 @@
                                Foreground="{StaticResource TextSecondaryBrush}"
                                VerticalAlignment="Center"
                                Margin="0,0,10,0" />
-                    <ComboBox Width="250"
+                    <ComboBox Width="210"
                               ItemsSource="{Binding PollingRates}"
                               SelectedItem="{Binding SelectedPollingRate, Mode=TwoWay}" />
                 </StackPanel>
@@ -62,19 +83,21 @@
 
         <Grid Grid.Row="1" Margin="0,18,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="286" />
+                <ColumnDefinition Width="330" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="370" />
+                <ColumnDefinition Width="420" />
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Style="{StaticResource CardStyle}">
                 <DockPanel LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Top" Text="状态" Style="{StaticResource SectionTitleStyle}" />
+                    <TextBlock DockPanel.Dock="Top" Text="设备状态" Style="{StaticResource SectionTitleStyle}" />
                     <StackPanel>
                         <controls:StatusBadge Label="当前设备" Value="{Binding CurrentDevice}" />
                         <controls:StatusBadge Label="手柄类型" Value="{Binding ControllerTypeText}" />
                         <controls:StatusBadge Label="输入模式" Value="{Binding InputModeText}" />
                         <controls:StatusBadge Label="连接状态" Value="{Binding ConnectionStatusText}" />
+                        <controls:StatusBadge Label="VID / PID" Value="{Binding VidPidText}" />
+                        <controls:StatusBadge Label="Usage" Value="{Binding UsageText}" />
                         <controls:StatusBadge Label="当前轮询率" Value="{Binding CurrentPollingRateText}" />
                         <controls:StatusBadge Label="实际循环频率" Value="{Binding ActualFrequencyText}" />
                         <controls:StatusBadge Label="平均延迟" Value="{Binding AverageLatencyText}" />
@@ -91,51 +114,52 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
-                    <Grid Grid.Row="0" Margin="0,0,0,12">
+                    <Grid Grid.Row="0" Margin="0,0,0,14">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBlock Text="映射表" Style="{StaticResource SectionTitleStyle}" Margin="0" />
+                        <StackPanel>
+                            <TextBlock Text="映射管理" Style="{StaticResource SectionTitleStyle}" Margin="0" />
+                            <TextBlock Text="手柄输入只会绑定到一个键盘键或一个鼠标键，释放时同步释放。"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       FontSize="12"
+                                       Margin="0,5,0,0" />
+                        </StackPanel>
                         <Button Grid.Column="1"
                                 Content="添加映射"
                                 Command="{Binding AddMappingCommand}"
                                 Style="{StaticResource PrimaryButtonStyle}"
-                                MinHeight="34"
-                                Padding="14,6" />
+                                MinHeight="36"
+                                Padding="16,7" />
                     </Grid>
 
                     <DataGrid Grid.Row="1"
                               ItemsSource="{Binding Mappings}"
-                              Margin="0"
                               RowHeaderWidth="0">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="手柄按键"
-                                                Binding="{Binding SourceButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                Width="1.35*" />
-                            <DataGridTemplateColumn Header="输出类型" Width="1.1*">
+                            <DataGridTemplateColumn Header="手柄按键" Width="1.35*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <ComboBox ItemsSource="{Binding DataContext.TargetKindOptions, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                  SelectedValue="{Binding Target.Kind, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                  SelectedValuePath="Kind"
-                                                  DisplayMemberPath="DisplayName" />
+                                        <ComboBox ItemsSource="{Binding DataContext.SourceButtonOptions, RelativeSource={RelativeSource AncestorType=DataGrid}}"
+                                                  Text="{Binding SourceButton, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                  IsEditable="True"
+                                                  MinHeight="32" />
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="映射目标" Width="1.55*">
-                                <DataGridTemplateColumn.CellTemplate>
-                                    <DataTemplate>
-                                        <ComboBox IsEditable="True"
-                                                  ItemsSource="{Binding DataContext.TargetValues, RelativeSource={RelativeSource AncestorType=DataGrid}}"
-                                                  Text="{Binding Target.Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                                    </DataTemplate>
-                                </DataGridTemplateColumn.CellTemplate>
-                            </DataGridTemplateColumn>
-                            <DataGridCheckBoxColumn Header="是否启用"
+                            <DataGridTextColumn Header="输出类型"
+                                                Binding="{Binding OutputTypeDisplayName}"
+                                                IsReadOnly="True"
+                                                Width="0.8*" />
+                            <DataGridTextColumn Header="映射目标"
+                                                Binding="{Binding Target.DisplayName}"
+                                                IsReadOnly="True"
+                                                Width="1.1*" />
+                            <DataGridCheckBoxColumn Header="启用"
                                                     Binding="{Binding IsEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                    Width="0.85*" />
-                            <DataGridTemplateColumn Header="编辑" Width="72">
+                                                    Width="0.55*" />
+                            <DataGridTemplateColumn Header="编辑" Width="78">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Button Content="编辑"
@@ -145,7 +169,7 @@
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="删除" Width="72">
+                            <DataGridTemplateColumn Header="删除" Width="78">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <Button Content="删除"
@@ -162,22 +186,22 @@
 
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="300" />
-                    <RowDefinition Height="168" />
+                    <RowDefinition Height="330" />
+                    <RowDefinition Height="170" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="0,0,0,14">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="手柄实时预览" Style="{StaticResource SectionTitleStyle}" />
-                        <controls:ControllerPreviewControl ControllerType="{Binding PreviewControllerType}"
-                                                           PressedButtons="{Binding PressedButtonNames}" />
+                        <TextBlock DockPanel.Dock="Top" Text="手柄预览" Style="{StaticResource SectionTitleStyle}" />
+                        <controls:DevicePreviewControl ControllerType="{Binding PreviewControllerType}"
+                                                       PressedButtons="{Binding PressedButtonNames}" />
                     </DockPanel>
                 </Border>
 
                 <Border Grid.Row="1" Style="{StaticResource CardStyle}" Margin="0,0,0,14">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="实时按键状态" Style="{StaticResource SectionTitleStyle}" />
+                        <TextBlock DockPanel.Dock="Top" Text="实时按键" Style="{StaticResource SectionTitleStyle}" />
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <ItemsControl ItemsSource="{Binding PressedButtonNames}">
                                 <ItemsControl.ItemsPanel>
@@ -190,8 +214,8 @@
                                         <Border Background="{StaticResource SoftPinkBrush}"
                                                 BorderBrush="{StaticResource BorderBrushSoft}"
                                                 BorderThickness="1"
-                                                CornerRadius="9"
-                                                Padding="10,5"
+                                                CornerRadius="10"
+                                                Padding="11,6"
                                                 Margin="0,0,8,8">
                                             <TextBlock Text="{Binding}"
                                                        FontWeight="SemiBold"

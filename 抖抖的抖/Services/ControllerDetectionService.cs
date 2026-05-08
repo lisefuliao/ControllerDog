@@ -7,7 +7,13 @@ public sealed record ControllerDetectionInfo(
     ControllerType ControllerType,
     string InputMode,
     bool IsConnected,
-    int? XInputIndex);
+    int? XInputIndex,
+    int? VendorId = null,
+    int? ProductId = null,
+    int? UsagePage = null,
+    int? Usage = null,
+    string DevicePath = "",
+    string Hint = "");
 
 public sealed class ControllerDetectionService
 {
@@ -31,7 +37,13 @@ public sealed class ControllerDetectionService
                 xInputState.ControllerType,
                 xInputState.InputMode,
                 true,
-                xInputState.XInputUserIndex);
+                xInputState.XInputUserIndex,
+                xInputState.VendorId,
+                xInputState.ProductId,
+                xInputState.UsagePage,
+                xInputState.Usage,
+                xInputState.DevicePath,
+                "XInput 优先");
         }
 
         var hid = _hidControllerService.DetectFirstHid();

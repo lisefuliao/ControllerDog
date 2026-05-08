@@ -21,7 +21,18 @@ public static class KeyCodeHelper
         ["上"] = Key.Up,
         ["下"] = Key.Down,
         ["左"] = Key.Left,
-        ["右"] = Key.Right
+        ["右"] = Key.Right,
+        [";"] = Key.OemSemicolon,
+        ["="] = Key.OemPlus,
+        [","] = Key.OemComma,
+        ["-"] = Key.OemMinus,
+        ["."] = Key.OemPeriod,
+        ["/"] = Key.OemQuestion,
+        ["`"] = Key.Oem3,
+        ["["] = Key.OemOpenBrackets,
+        ["\\"] = Key.OemPipe,
+        ["]"] = Key.OemCloseBrackets,
+        ["'"] = Key.OemQuotes
     };
 
     public static IReadOnlyList<string> KeyboardTargets { get; } = BuildKeyboardTargets();
@@ -91,6 +102,8 @@ public static class KeyCodeHelper
         result.AddRange(Enumerable.Range(0, 10).Select(x => x.ToString()));
         result.AddRange(["Space", "Enter", "Escape", "Tab", "Back", "Delete", "Insert", "Home", "End", "PageUp", "PageDown"]);
         result.AddRange(["Up", "Down", "Left", "Right", "LeftShift", "LeftCtrl", "LeftAlt", "RightShift", "RightCtrl", "RightAlt"]);
+        result.AddRange(["CapsLock", "NumLock", "Scroll", "PrintScreen", "Pause"]);
+        result.AddRange(["OemSemicolon", "OemPlus", "OemComma", "OemMinus", "OemPeriod", "OemQuestion", "Oem3", "OemOpenBrackets", "OemPipe", "OemCloseBrackets", "OemQuotes"]);
         result.AddRange(Enumerable.Range(1, 24).Select(x => $"F{x}"));
         return result;
     }

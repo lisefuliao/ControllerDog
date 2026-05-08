@@ -22,6 +22,7 @@ public sealed class ControllerInputService : IDisposable
     private volatile int _pollingRateHz = 1000;
     private long _exceptionCount;
     private ControllerState _latestState = new();
+    private HashSet<string> _previousPressedButtons = new(StringComparer.OrdinalIgnoreCase);
 
     public ControllerInputService(
         XInputControllerService xInputControllerService,
@@ -117,7 +118,7 @@ public sealed class ControllerInputService : IDisposable
                 }
 
                 latencyStopwatch.Restart();
-                var state = ReadCurrentState();
+                var state = ApplyButtonStateMachine(ReadCurrentState());
                 latencyStopwatch.Stop();
 
                 latencyAverage = latencyAverage <= 0
@@ -172,6 +173,42 @@ public sealed class ControllerInputService : IDisposable
             InputMode = "Auto",
             Timestamp = DateTimeOffset.Now
         };
+    }
+
+    private ControllerState ApplyButtonStateMachine(ControllerState state)
+    {
+        var phases = new Dictionary<string, ButtonPhase>(StringComparer.OrdinalIgnoreCase);
+
+        if (!state.IsConnected)
+        {
+            foreach (var previous in _previousPressedButtons)
+            {
+                phases[previous] = ButtonPhase.Released;
+            }
+
+            _previousPressedButtons.Clear();
+            state.ButtonPhases = phases;
+            return state;
+        }
+
+        foreach (var button in state.PressedButtons)
+        {
+            phases[button] = _previousPressedButtons.Contains(button)
+                ? ButtonPhase.Held
+                : ButtonPhase.Down;
+        }
+
+        foreach (var previous in _previousPressedButtons)
+        {
+            if (!state.PressedButtons.Contains(previous))
+            {
+                phases[previous] = ButtonPhase.Released;
+            }
+        }
+
+        _previousPressedButtons = new HashSet<string>(state.PressedButtons, StringComparer.OrdinalIgnoreCase);
+        state.ButtonPhases = phases;
+        return state;
     }
 
     public void Dispose()

@@ -14,11 +14,49 @@ public sealed class ControllerState
 
     public int? XInputUserIndex { get; set; }
 
+    public int? VendorId { get; set; }
+
+    public int? ProductId { get; set; }
+
+    public int? UsagePage { get; set; }
+
+    public int? Usage { get; set; }
+
+    public string DevicePath { get; set; } = "";
+
     public HashSet<string> PressedButtons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Dictionary<string, ButtonPhase> ButtonPhases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
 
     public string RawSummary { get; set; } = "";
+
+    public string VidPidText
+    {
+        get
+        {
+            if (VendorId is null || ProductId is null)
+            {
+                return "N/A";
+            }
+
+            return $"VID_{VendorId.Value:X4} / PID_{ProductId.Value:X4}";
+        }
+    }
+
+    public string UsageText
+    {
+        get
+        {
+            if (UsagePage is null || Usage is null)
+            {
+                return "N/A";
+            }
+
+            return $"0x{UsagePage.Value:X2} / 0x{Usage.Value:X2}";
+        }
+    }
 
     public bool IsPressed(string sourceButton)
     {
@@ -47,7 +85,13 @@ public sealed class ControllerState
             ControllerType = ControllerType,
             InputMode = InputMode,
             XInputUserIndex = XInputUserIndex,
+            VendorId = VendorId,
+            ProductId = ProductId,
+            UsagePage = UsagePage,
+            Usage = Usage,
+            DevicePath = DevicePath,
             PressedButtons = new HashSet<string>(PressedButtons, StringComparer.OrdinalIgnoreCase),
+            ButtonPhases = new Dictionary<string, ButtonPhase>(ButtonPhases, StringComparer.OrdinalIgnoreCase),
             Timestamp = Timestamp,
             RawSummary = RawSummary
         };
