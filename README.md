@@ -1,6 +1,6 @@
 # 抖抖的抖 / ControllerDog
 
-抖抖的抖是一个 Windows 本地 WPF 手柄按键映射工具。
+抖抖的抖是一个 Windows 本地手柄按键映射工具。
 
 它只做一件事：把手柄输入一对一映射到键盘按键或鼠标按键然后抖抖抖抖抖抖抖抖。项目不包含宏、连发、自动压枪、自动操作、游戏内存读写、注入、驱动级伪装、虚拟 HID 输出或任何复杂外挂功能。
 
@@ -8,8 +8,39 @@
 
 普通玩家不需要编译项目，直接到 GitHub Releases 下载最新 exe：
 
-[下载最新版本](https://github.com/lisefuliao/ControllerDog/releases/latest)
+[下载最新版](https://github.com/lisefuliao/ControllerDog/releases/latest)
 
+
+## 最近更新
+
+### v0.5 UI Preview
+
+- 接入 DS4、XInput / Xbox、DualSense 三套手柄图片资源。
+- 手柄预览改为“底图 + 透明热区 + 程序高亮”，避免粗糙的悬浮按键遮挡手柄本体。
+- 新增热区校准模式：如果按键点击位置不够准，可以手动拖动热区到正确位置。
+- 高亮反馈只在悬停、按下、已映射和校准时出现，默认界面更干净。
+- 保留点击手柄按键直接设置映射的交互。
+- 保留键盘/鼠标目标选择窗口，并支持选择后高亮已选目标。
+- 保留 Light / Dark 主题、Accent 颜色、轮询率、保存配置、加载配置。
+- README 和更新日志移动到仓库根目录，主页可以直接看到。
+
+### v0.4
+
+- 去掉中间映射表，改为直接点击手柄预览图进行映射。
+- 键鼠选择窗口改为图形化键盘/鼠标布局。
+- 选择映射目标后高亮显示，点击“完成”后保存关闭。
+- XInput 模式下隐藏 DS 专属的 `PS` / `Touchpad` UI。
+- DS4 模式下实时按键状态显示 DS 风格名称。
+- 降低后台运行时 UI 刷新频率，减少性能占用。
+
+### 第二版重构基础
+
+- 增加 DS4 / HID / XInput 检测。
+- 增加 `ButtonDown` / `ButtonHeld` / `ButtonUp` 防抖状态机。
+- 输入读取线程和 UI 线程分离。
+- Auto 模式优先 XInput，无法读取时 fallback HID。
+- 修复映射编辑弹窗卡死问题。
+- 修复 DS4 按键闪烁、重复触发和状态不稳定问题。
 
 ## 当前功能
 
@@ -48,35 +79,25 @@
 
 校准数据保存在当前 Windows 用户的应用数据目录中，不会影响映射配置。
 
-## 最近更新
+## 本地编译
 
-### v0.5 UI Preview
+如果你想自己编译：
 
-- 接入 DS4 / XInput / DualSense 三套手柄底图资源。
-- 改为“底图 + 透明热区 + 程序高亮”的手柄预览结构。
-- 新增热区校准模式，允许手动拖动不准确的点击区域。
-- 默认隐藏粗糙边框，只在悬停、按下、校准时显示高亮反馈。
-- 保留点击手柄按键直接设置映射的交互。
-- 保留键盘/鼠标目标选择弹窗。
-- 保留 Light / Dark 主题、Accent 颜色、轮询率、保存/加载配置。
+```powershell
+dotnet build .\抖抖的抖.sln -c Release
+```
 
-### v0.4
+发布单文件 exe：
 
-- 去掉中间映射表，改为直接点击手柄预览图进行映射。
-- 键鼠选择窗口改为图形化键盘/鼠标布局。
-- 选择映射目标后高亮显示，点击“完成”后保存关闭。
-- XInput 模式下隐藏 DS 专属的 `PS` / `Touchpad` UI。
-- DS4 模式下实时按键状态显示 DS 风格名称。
-- 降低后台运行时 UI 刷新频率。
+```powershell
+dotnet publish .\抖抖的抖\抖抖的抖.csproj -p:PublishProfile=win-x64-single-file
+```
 
-### 第二版重构基础
+发布输出一般在：
 
-- 增加 DS4 / HID / XInput 检测。
-- 增加 `ButtonDown` / `ButtonHeld` / `ButtonUp` 防抖状态机。
-- 输入读取线程和 UI 线程分离。
-- Auto 模式优先 XInput，无法读取时 fallback HID。
-- 修复映射编辑弹窗卡死问题。
-- 修复 DS4 按键闪烁、重复触发和状态不稳定问题。
+```text
+抖抖的抖\bin\Release\net8.0-windows10.0.19041.0\win-x64\publish\抖抖的抖.exe
+```
 
 ## 注意事项
 
