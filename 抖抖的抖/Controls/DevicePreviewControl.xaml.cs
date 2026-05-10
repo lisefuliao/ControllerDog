@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
+using System.Windows.Threading;
 using DouDouDeDou.Models;
 using ControllerTypeModel = DouDouDeDou.Models.ControllerType;
 
@@ -31,13 +32,24 @@ public partial class DevicePreviewControl : UserControl
     private readonly Brush _disconnectedBrush = new SolidColorBrush(Color.FromRgb(232, 226, 229));
     private readonly Brush _textBrush = new SolidColorBrush(Color.FromRgb(43, 43, 43));
     private readonly Brush _activeTextBrush = Brushes.White;
+    private readonly DispatcherTimer _refreshTimer;
     private INotifyCollectionChanged? _observedPressedCollection;
+    private HashSet<string> _pendingPressedButtons = new(StringComparer.OrdinalIgnoreCase);
+    private ControllerTypeModel _pendingControllerType = ControllerTypeModel.None;
+    private bool _refreshRequested = true;
 
     public DevicePreviewControl()
     {
         InitializeComponent();
+        _refreshTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(33)
+        };
+        _refreshTimer.Tick += (_, _) => FlushPendingRefresh();
+        _refreshTimer.Start();
+        Unloaded += (_, _) => _refreshTimer.Stop();
         UpdateLabels();
-        UpdateHighlights();
+        RequestRefresh();
     }
 
     public ControllerTypeModel ControllerType
@@ -55,8 +67,8 @@ public partial class DevicePreviewControl : UserControl
     private static void OnVisualStateChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         var control = (DevicePreviewControl)d;
-        control.UpdateLabels();
-        control.UpdateHighlights();
+        control._pendingControllerType = control.ControllerType;
+        control.RequestRefresh();
     }
 
     private static void OnPressedButtonsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
@@ -73,12 +85,14 @@ public partial class DevicePreviewControl : UserControl
             control._observedPressedCollection.CollectionChanged += control.OnPressedCollectionChanged;
         }
 
-        control.UpdateHighlights();
+        control.CapturePendingPressedButtons();
+        control.RequestRefresh();
     }
 
     private void OnPressedCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        UpdateHighlights();
+        CapturePendingPressedButtons();
+        RequestRefresh();
     }
 
     private void UpdateLabels()
@@ -123,8 +137,8 @@ public partial class DevicePreviewControl : UserControl
 
     private void UpdateHighlights()
     {
-        var pressed = GetPressedCanonicalButtons();
-        var disconnected = ControllerType == ControllerTypeModel.None;
+        var pressed = _pendingPressedButtons;
+        var disconnected = _pendingControllerType == ControllerTypeModel.None;
 
         ControllerShell.Fill = disconnected
             ? new SolidColorBrush(Color.FromRgb(248, 246, 247))
@@ -165,6 +179,30 @@ public partial class DevicePreviewControl : UserControl
         }
 
         return result;
+    }
+
+    private void CapturePendingPressedButtons()
+    {
+        _pendingPressedButtons = GetPressedCanonicalButtons();
+    }
+
+    private void RequestRefresh()
+    {
+        CapturePendingPressedButtons();
+        _pendingControllerType = ControllerType;
+        _refreshRequested = true;
+    }
+
+    private void FlushPendingRefresh()
+    {
+        if (!_refreshRequested)
+        {
+            return;
+        }
+
+        _refreshRequested = false;
+        UpdateLabels();
+        UpdateHighlights();
     }
 
     private void SetShape(Shape shape, TextBlock? label, bool active, bool disconnected)

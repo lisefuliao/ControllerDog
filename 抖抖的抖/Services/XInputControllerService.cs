@@ -6,10 +6,11 @@ namespace DouDouDeDou.Services;
 public sealed class XInputControllerService
 {
     private const byte TriggerThreshold = 30;
+    private const uint MaxUserIndex = 4;
 
     public bool TryGetFirstConnectedState(out ControllerState state)
     {
-        for (uint index = 0; index < 4; index++)
+        for (uint index = 0; index < MaxUserIndex; index++)
         {
             if (TryGetState(index, out state))
             {
@@ -18,6 +19,21 @@ public sealed class XInputControllerService
         }
 
         state = new ControllerState();
+        return false;
+    }
+
+    public bool TryGetFirstConnectedIndex(out uint userIndex)
+    {
+        for (uint index = 0; index < MaxUserIndex; index++)
+        {
+            if (XInput.GetState(index, out _))
+            {
+                userIndex = index;
+                return true;
+            }
+        }
+
+        userIndex = 0;
         return false;
     }
 

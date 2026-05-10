@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
@@ -8,6 +8,7 @@
     <RootNamespace>DouDouDeDou</RootNamespace>
     <AssemblyName>抖抖的抖</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\Icons\app-icon.ico</ApplicationIcon>
     <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
   </PropertyGroup>
 
@@ -18,7 +19,13 @@
 
   <ItemGroup>
     <None Include="config.default.json" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="README.md" CopyToOutputDirectory="Never" />
-    <None Include="Assets\Svg\*.svg" CopyToOutputDirectory="Never" />
+    <Resource Include="Assets\Images\*.png" />
+    <Resource Include="Assets\Icons\*.png" />
+    <Resource Include="Assets\UI\*.png" />
+    <Resource Include="Assets\References\*.png" />
+    <Resource Include="Assets\Controllers\**\*.svg" />
+    <Resource Include="Assets\Controllers\**\*.xaml" />
+    <Resource Include="Assets\Themes\*.xaml" />
   </ItemGroup>
 </Project>
+

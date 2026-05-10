@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -16,6 +17,7 @@ namespace DouDouDeDou.ViewModels;
 public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 {
     private readonly ConfigService _configService = new();
+    private readonly ThemeService _themeService = new();
     private readonly InputOutputService _inputOutputService = new();
     private readonly SafeReleaseManager _safeReleaseManager = new();
     private readonly XInputControllerService _xInputControllerService = new();
@@ -25,6 +27,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private readonly MappingEngine _mappingEngine;
     private readonly WatchdogService _watchdogService;
     private readonly DispatcherTimer _deviceMonitorTimer;
+    private readonly DispatcherTimer _uiRefreshTimer;
+    private readonly object _pendingUiGate = new();
     private readonly Dictionary<string, DateTimeOffset> _lastLogTimes = new(StringComparer.OrdinalIgnoreCase);
 
     private PollingRateOption _selectedPollingRate = PollingRateOption.Defaults.First(x => x.Hertz == 1000);
@@ -34,19 +38,22 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private string _inputModeText = "Auto";
     private string _connectionStatusText = "未连接";
     private string _currentPollingRateText = "1000 Hz";
-    private string _vidPidText = "N/A";
-    private string _usageText = "N/A";
     private string _actualFrequencyText = "0 Hz";
     private string _averageLatencyText = "0.000 ms";
     private string _exceptionCountText = "0";
     private string _antiStickyStatusText = "待机";
     private string _mappingStatusText = "未开始";
+    private ThemeOption _selectedTheme;
+    private bool _isDarkTheme;
     private bool _isMappingRunning;
-    private long _lastUiRefreshTicks;
-    private int _uiRefreshPending;
+    private bool _isLogExpanded = true;
+    private bool _isHotspotCalibrationMode;
+    private ControllerState? _pendingUiState;
+    private int _uiRefreshScheduled;
 
     public MainViewModel()
     {
+        _selectedTheme = _themeService.GetTheme("blue");
         _controllerInputService = new ControllerInputService(_xInputControllerService, _hidControllerService);
         _controllerDetectionService = new ControllerDetectionService(_xInputControllerService, _hidControllerService);
         _mappingEngine = new MappingEngine(_inputOutputService, _safeReleaseManager);
@@ -63,6 +70,13 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         AddMappingCommand = new RelayCommand(_ => AddMapping());
         DeleteMappingCommand = new RelayCommand(DeleteMapping, x => x is MappingEntry);
         EditMappingCommand = new RelayCommand(EditMapping, x => x is MappingEntry);
+        SelectSourceButtonCommand = new RelayCommand(SelectSourceButton, x => x is string);
+        SelectThemeCommand = new RelayCommand(SelectTheme, x => x is ThemeOption);
+        ToggleThemeModeCommand = new RelayCommand(_ => IsDarkTheme = !IsDarkTheme);
+        OpenSettingsCommand = new RelayCommand(_ => OpenSettings());
+        ToggleHotspotCalibrationCommand = new RelayCommand(_ => IsHotspotCalibrationMode = !IsHotspotCalibrationMode);
+        ToggleLogsCommand = new RelayCommand(_ => IsLogExpanded = !IsLogExpanded);
+        ClearLogsCommand = new RelayCommand(_ => Logs.Clear());
 
         Mappings.CollectionChanged += OnMappingsChanged;
 
@@ -73,26 +87,32 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         _mappingEngine.Log += AddLog;
         _watchdogService.Log += AddLog;
 
+        UpdateLiveButtonLayout(ControllerType.None);
         LoadInitialConfig();
         DetectControllerOnce();
 
-        _deviceMonitorTimer = new DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(700)
-        };
+        _deviceMonitorTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(700) };
         _deviceMonitorTimer.Tick += (_, _) =>
         {
-            if (!_controllerInputService.IsRunning)
+            if (IsUiRefreshAllowed())
             {
                 DetectControllerOnce();
             }
         };
         _deviceMonitorTimer.Start();
+
+        _uiRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _uiRefreshTimer.Tick += (_, _) => FlushUiRefresh();
+        _uiRefreshTimer.Start();
+
+        _controllerInputService.Start();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
     public IReadOnlyList<PollingRateOption> PollingRates => PollingRateOption.Defaults;
+
+    public IReadOnlyList<ThemeOption> Themes => _themeService.Themes;
 
     public IReadOnlyList<TargetKindOption> TargetKindOptions { get; } =
     [
@@ -112,14 +132,19 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         "A", "B", "X", "Y",
         "LB / L1", "RB / R1", "LT / L2", "RT / R2",
         "Back / Share / Create", "Start / Options",
+        "PS", "Touchpad",
         "LeftStick", "RightStick",
         "DPadUp", "DPadDown", "DPadLeft", "DPadRight",
-        "Button13", "Button14", "Button15", "Button16"
+        "Button13", "Button14", "Button15", "Button16",
+        "Button17", "Button18", "Button19", "Button20",
+        "Button21", "Button22", "Button23", "Button24"
     ];
 
     public ObservableCollection<MappingEntry> Mappings { get; } = new();
 
     public ObservableCollection<string> PressedButtonNames { get; } = new();
+
+    public ObservableCollection<LiveButtonIndicator> LiveButtonStates { get; } = new();
 
     public ObservableCollection<string> Logs { get; } = new();
 
@@ -137,6 +162,20 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     public ICommand EditMappingCommand { get; }
 
+    public ICommand SelectSourceButtonCommand { get; }
+
+    public ICommand SelectThemeCommand { get; }
+
+    public ICommand ToggleThemeModeCommand { get; }
+
+    public ICommand OpenSettingsCommand { get; }
+
+    public ICommand ToggleHotspotCalibrationCommand { get; }
+
+    public ICommand ToggleLogsCommand { get; }
+
+    public ICommand ClearLogsCommand { get; }
+
     public PollingRateOption SelectedPollingRate
     {
         get => _selectedPollingRate;
@@ -150,7 +189,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             _selectedPollingRate = value;
             CurrentPollingRateText = value.DisplayName;
             _controllerInputService.SetPollingRate(value.Hertz);
-            AutoSaveConfig();
             OnPropertyChanged();
         }
     }
@@ -160,6 +198,60 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         get => _previewControllerType;
         set => SetField(ref _previewControllerType, value);
     }
+
+    public ThemeOption SelectedTheme
+    {
+        get => _selectedTheme;
+        set
+        {
+            if (value is null || string.Equals(_selectedTheme.Key, value.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _selectedTheme = value;
+            _themeService.ApplyTheme(value.Key, IsDarkTheme ? "dark" : "light");
+            OnPropertyChanged();
+        }
+    }
+
+    public bool IsDarkTheme
+    {
+        get => _isDarkTheme;
+        set
+        {
+            if (!SetField(ref _isDarkTheme, value))
+            {
+                return;
+            }
+
+            _themeService.ApplyTheme(SelectedTheme.Key, value ? "dark" : "light");
+            OnPropertyChanged(nameof(ThemeModeText));
+            OnPropertyChanged(nameof(ThemeModeIcon));
+        }
+    }
+
+    public string ThemeModeText => IsDarkTheme ? "深色" : "浅色";
+
+    public string ThemeModeIcon => IsDarkTheme ? "☾" : "☀";
+
+    public string SelectedControllerAppearanceKey => "minimal";
+
+    public bool IsHotspotCalibrationMode
+    {
+        get => _isHotspotCalibrationMode;
+        set
+        {
+            if (!SetField(ref _isHotspotCalibrationMode, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(HotspotCalibrationText));
+        }
+    }
+
+    public string HotspotCalibrationText => IsHotspotCalibrationMode ? "完成校准" : "校准热区";
 
     public string CurrentDevice
     {
@@ -189,18 +281,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     {
         get => _currentPollingRateText;
         set => SetField(ref _currentPollingRateText, value);
-    }
-
-    public string VidPidText
-    {
-        get => _vidPidText;
-        set => SetField(ref _vidPidText, value);
-    }
-
-    public string UsageText
-    {
-        get => _usageText;
-        set => SetField(ref _usageText, value);
     }
 
     public string ActualFrequencyText
@@ -247,15 +327,44 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
     }
 
+    public bool IsLogExpanded
+    {
+        get => _isLogExpanded;
+        set
+        {
+            if (!SetField(ref _isLogExpanded, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(LogPanelHeight));
+            OnPropertyChanged(nameof(LogToggleText));
+            OnPropertyChanged(nameof(LogListVisibility));
+        }
+    }
+
+    public GridLength LogPanelHeight => IsLogExpanded ? new GridLength(1, GridUnitType.Star) : GridLength.Auto;
+
+    public string LogToggleText => IsLogExpanded ? "折叠" : "展开";
+
+    public Visibility LogListVisibility => IsLogExpanded ? Visibility.Visible : Visibility.Collapsed;
+
     private void LoadInitialConfig()
     {
         var config = _configService.LoadOrCreate();
         var rate = PollingRates.FirstOrDefault(x => x.Hertz == config.PollingRateHz)
                    ?? PollingRates.First(x => x.Hertz == 1000);
         _selectedPollingRate = rate;
+        _selectedTheme = _themeService.GetTheme(config.ThemeKey);
+        _isDarkTheme = string.Equals(config.ThemeMode, "dark", StringComparison.OrdinalIgnoreCase);
+        _themeService.ApplyTheme(_selectedTheme.Key, _isDarkTheme ? "dark" : "light");
         CurrentPollingRateText = rate.DisplayName;
         _controllerInputService.SetPollingRate(rate.Hertz);
         OnPropertyChanged(nameof(SelectedPollingRate));
+        OnPropertyChanged(nameof(SelectedTheme));
+        OnPropertyChanged(nameof(IsDarkTheme));
+        OnPropertyChanged(nameof(ThemeModeText));
+        OnPropertyChanged(nameof(ThemeModeIcon));
 
         Mappings.Clear();
         foreach (var mapping in config.Mappings)
@@ -274,9 +383,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ControllerTypeText = info.ControllerType.ToDisplayName();
         InputModeText = info.InputMode;
         ConnectionStatusText = info.IsConnected ? "已连接" : "未连接";
-        VidPidText = FormatVidPid(info.VendorId, info.ProductId);
-        UsageText = FormatUsage(info.UsagePage, info.Usage);
         PreviewControllerType = info.ControllerType;
+        UpdateLiveButtonLayout(info.ControllerType);
     }
 
     private void StartMapping()
@@ -295,7 +403,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     private void StopMapping()
     {
         _watchdogService.Stop();
-        _controllerInputService.Stop();
         _mappingEngine.Stop();
         IsMappingRunning = false;
         MappingStatusText = "已停止";
@@ -325,6 +432,8 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         var config = _configService.LoadFrom(dialog.FileName);
         SelectedPollingRate = PollingRates.FirstOrDefault(x => x.Hertz == config.PollingRateHz)
                               ?? PollingRates.First(x => x.Hertz == 1000);
+        SelectedTheme = _themeService.GetTheme(config.ThemeKey);
+        IsDarkTheme = string.Equals(config.ThemeMode, "dark", StringComparison.OrdinalIgnoreCase);
         Mappings.Clear();
         foreach (var mapping in config.Mappings)
         {
@@ -332,7 +441,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
         AddLog($"配置已加载：{dialog.FileName}");
     }
 
@@ -345,8 +453,7 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
             IsEnabled = true
         });
         ApplyMappingsToEngine();
-        AutoSaveConfig();
-        AddLog("已添加一条映射，点击“编辑”选择输出目标。");
+        AddLog("已添加一条映射，点击手柄按键即可重新选择来源和目标。");
     }
 
     private void DeleteMapping(object? parameter)
@@ -359,39 +466,113 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         Mappings.Remove(mapping);
         _mappingEngine.ReleaseAll("删除映射后刷新状态");
         ApplyMappingsToEngine();
-        AutoSaveConfig();
         AddLog($"已删除映射：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
     }
 
-    private void EditMapping(object? parameter)
+    private async void EditMapping(object? parameter)
     {
         if (parameter is not MappingEntry mapping)
         {
             return;
         }
 
-        var dialog = new InputCaptureDialog(mapping.Target.Clone())
-        {
-            Owner = Application.Current.MainWindow
-        };
+        var dialog = new InputCaptureDialog(mapping.Target.Clone());
+        var result = await dialog.ShowCaptureAsync(Application.Current.MainWindow);
 
-        if (dialog.ShowDialog() == true && dialog.SelectedTarget is not null)
+        if (result == true && dialog.SelectedTarget is not null)
         {
             mapping.Target = dialog.SelectedTarget.Clone();
             ApplyMappingsToEngine();
-            AutoSaveConfig();
             AddLog($"映射已更新：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
         }
+    }
+
+    private async void SelectSourceButton(object? parameter)
+    {
+        if (parameter is not string sourceButton || string.IsNullOrWhiteSpace(sourceButton))
+        {
+            return;
+        }
+
+        var mapping = FindMappingBySource(sourceButton);
+        var isNewMapping = false;
+        if (mapping is null)
+        {
+            mapping = new MappingEntry
+            {
+                SourceButton = sourceButton,
+                Target = new InputTarget { Kind = InputTargetKind.Keyboard, Value = "Space" },
+                IsEnabled = true
+            };
+            Mappings.Add(mapping);
+            isNewMapping = true;
+        }
+
+        var dialog = new InputCaptureDialog(mapping.Target.Clone());
+        var result = await dialog.ShowCaptureAsync(Application.Current.MainWindow);
+
+        if (result == true && dialog.SelectedTarget is not null)
+        {
+            mapping.SourceButton = sourceButton;
+            mapping.Target = dialog.SelectedTarget.Clone();
+            ApplyMappingsToEngine();
+            AddLog($"已设置映射：{mapping.SourceButton} -> {mapping.Target.DisplayName}");
+            return;
+        }
+
+        if (isNewMapping)
+        {
+            Mappings.Remove(mapping);
+            ApplyMappingsToEngine();
+        }
+    }
+
+    private MappingEntry? FindMappingBySource(string sourceButton)
+    {
+        var requestedAliases = ControllerState.SplitAliases(sourceButton);
+        return Mappings.FirstOrDefault(mapping =>
+        {
+            var mappingAliases = ControllerState.SplitAliases(mapping.SourceButton);
+            return mappingAliases.Any(alias => requestedAliases.Contains(alias, StringComparer.OrdinalIgnoreCase));
+        });
+    }
+
+    private void SelectTheme(object? parameter)
+    {
+        if (parameter is ThemeOption theme)
+        {
+            SelectedTheme = theme;
+        }
+    }
+
+    private void OpenSettings()
+    {
+        var owner = Application.Current.MainWindow;
+        var window = new SettingsWindow
+        {
+            Owner = owner,
+            DataContext = this
+        };
+
+        window.ShowDialog();
     }
 
     private void OnStateReceived(object? sender, ControllerState state)
     {
         _mappingEngine.HandleState(state);
-        QueueUiRefresh(state);
+        if (IsUiRefreshAllowed())
+        {
+            QueueUiRefresh(state);
+        }
     }
 
     private void OnMetricsUpdated(object? sender, InputMetrics metrics)
     {
+        if (!IsUiRefreshAllowed())
+        {
+            return;
+        }
+
         Application.Current.Dispatcher.BeginInvoke(() =>
         {
             ActualFrequencyText = $"{metrics.ActualFrequencyHz:F0} Hz";
@@ -402,30 +583,74 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
 
     private void QueueUiRefresh(ControllerState state)
     {
-        var nowTicks = Environment.TickCount64;
-        if (nowTicks - _lastUiRefreshTicks < 17)
-        {
-            return;
-        }
-
-        _lastUiRefreshTicks = nowTicks;
-        if (Interlocked.Exchange(ref _uiRefreshPending, 1) == 1)
-        {
-            return;
-        }
-
         var snapshot = state.Clone();
-        Application.Current.Dispatcher.BeginInvoke(() =>
+        lock (_pendingUiGate)
         {
-            try
+            _pendingUiState = snapshot;
+        }
+
+        if (Interlocked.Exchange(ref _uiRefreshScheduled, 1) == 0)
+        {
+            Application.Current.Dispatcher.BeginInvoke(new Action(() =>
             {
-                UpdateUiState(snapshot);
-            }
-            finally
+                try
+                {
+                    FlushUiRefresh();
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref _uiRefreshScheduled, 0);
+                }
+            }), DispatcherPriority.Render);
+        }
+    }
+
+    private void FlushUiRefresh()
+    {
+        if (!IsUiRefreshAllowed())
+        {
+            lock (_pendingUiGate)
             {
-                Interlocked.Exchange(ref _uiRefreshPending, 0);
+                _pendingUiState = null;
             }
-        });
+
+            return;
+        }
+
+        ControllerState? snapshot;
+        lock (_pendingUiGate)
+        {
+            snapshot = _pendingUiState;
+            _pendingUiState = null;
+        }
+
+        snapshot ??= _controllerInputService.LatestState;
+        if (snapshot is not null)
+        {
+            UpdateUiState(snapshot);
+        }
+    }
+
+    private static bool IsUiRefreshAllowed()
+    {
+        var app = Application.Current;
+        if (app is null)
+        {
+            return false;
+        }
+
+        var dispatcher = app.Dispatcher;
+        if (dispatcher is null)
+        {
+            return false;
+        }
+
+        if (!dispatcher.CheckAccess())
+        {
+            return true;
+        }
+
+        return app.MainWindow?.IsActive == true;
     }
 
     private void UpdateUiState(ControllerState state)
@@ -434,15 +659,94 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         ControllerTypeText = state.ControllerType.ToDisplayName();
         InputModeText = state.InputMode;
         ConnectionStatusText = state.IsConnected ? "已连接" : "未连接";
-        VidPidText = state.VidPidText;
-        UsageText = state.UsageText;
         PreviewControllerType = state.ControllerType;
 
         PressedButtonNames.Clear();
-        foreach (var button in state.GetPressedButtonsSnapshot())
+        var displayButtons = GetDisplayPressedButtons(state);
+        foreach (var button in displayButtons)
         {
             PressedButtonNames.Add(button);
         }
+
+        UpdateLiveButtonLayout(state.ControllerType);
+        var pressed = displayButtons.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var indicator in LiveButtonStates)
+        {
+            indicator.IsActive = pressed.Contains(indicator.Label);
+        }
+    }
+
+    private void UpdateLiveButtonLayout(ControllerType controllerType)
+    {
+        var labels = GetLiveButtonLabels(controllerType);
+        if (LiveButtonStates.Select(x => x.Label).SequenceEqual(labels, StringComparer.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        LiveButtonStates.Clear();
+        foreach (var label in labels)
+        {
+            LiveButtonStates.Add(new LiveButtonIndicator(label));
+        }
+    }
+
+    private static IReadOnlyList<string> GetLiveButtonLabels(ControllerType controllerType)
+    {
+        if (controllerType is ControllerType.DualShock4 or ControllerType.DualSenseDse)
+        {
+            return
+            [
+                "Cross", "Circle", "Square", "Triangle",
+                "L1", "R1", "L2", "R2",
+                "LeftStick", "RightStick",
+                controllerType == ControllerType.DualSenseDse ? "Create" : "Share",
+                "Options", "PS", "Touchpad",
+                "DPadUp", "DPadDown", "DPadLeft", "DPadRight"
+            ];
+        }
+
+        return
+        [
+            "A", "B", "X", "Y",
+            "LB", "RB", "LT", "RT",
+            "LeftStick", "RightStick",
+            "Back", "Start",
+            "DPadUp", "DPadDown", "DPadLeft", "DPadRight"
+        ];
+    }
+
+    private static IReadOnlyList<string> GetDisplayPressedButtons(ControllerState state)
+    {
+        return state.GetPressedButtonsSnapshot()
+            .Select(button => ToControllerDisplayButton(state.ControllerType, button))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(x => x)
+            .ToList();
+    }
+
+    private static string ToControllerDisplayButton(ControllerType controllerType, string button)
+    {
+        if (controllerType is not (ControllerType.DualShock4 or ControllerType.DualSenseDse))
+        {
+            return button;
+        }
+
+        return button switch
+        {
+            "A" => "Cross",
+            "B" => "Circle",
+            "X" => "Square",
+            "Y" => "Triangle",
+            "LB" => "L1",
+            "RB" => "R1",
+            "LT" => "L2",
+            "RT" => "R2",
+            "Back" => controllerType == ControllerType.DualSenseDse ? "Create" : "Share",
+            "Start" => "Options",
+            "PS" => "PS",
+            _ => button
+        };
     }
 
     private MappingConfig BuildConfig()
@@ -451,6 +755,9 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         {
             PollingRateHz = SelectedPollingRate.Hertz,
             InputMode = "Auto",
+            ThemeKey = SelectedTheme.Key,
+            ThemeMode = IsDarkTheme ? "dark" : "light",
+            ControllerAppearanceKey = "minimal",
             Mappings = Mappings.Select(x => x.Clone()).ToList()
         };
     }
@@ -491,7 +798,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
     }
 
     private void OnMappingPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -502,33 +808,6 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
         }
 
         ApplyMappingsToEngine();
-        AutoSaveConfig();
-    }
-
-    private void AutoSaveConfig()
-    {
-        try
-        {
-            _configService.Save(BuildConfig());
-        }
-        catch (Exception ex)
-        {
-            AddLog($"自动保存失败：{ex.Message}");
-        }
-    }
-
-    private static string FormatVidPid(int? vendorId, int? productId)
-    {
-        return vendorId is null || productId is null
-            ? "N/A"
-            : $"VID_{vendorId.Value:X4} / PID_{productId.Value:X4}";
-    }
-
-    private static string FormatUsage(int? usagePage, int? usage)
-    {
-        return usagePage is null || usage is null
-            ? "N/A"
-            : $"0x{usagePage.Value:X2} / 0x{usage.Value:X2}";
     }
 
     private void AddLog(string message)
@@ -570,10 +849,10 @@ public sealed class MainViewModel : INotifyPropertyChanged, IDisposable
     public void Dispose()
     {
         _deviceMonitorTimer.Stop();
-        AutoSaveConfig();
+        _uiRefreshTimer.Stop();
         StopMapping();
-        _watchdogService.Dispose();
         _controllerInputService.Dispose();
+        _watchdogService.Dispose();
         _mappingEngine.Dispose();
         _hidControllerService.Dispose();
         _inputOutputService.ReleaseAllPhysical();
@@ -609,3 +888,32 @@ public sealed class RelayCommand : ICommand
 }
 
 public sealed record TargetKindOption(InputTargetKind Kind, string DisplayName);
+
+public sealed class LiveButtonIndicator : INotifyPropertyChanged
+{
+    private bool _isActive;
+
+    public LiveButtonIndicator(string label)
+    {
+        Label = label;
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public string Label { get; }
+
+    public bool IsActive
+    {
+        get => _isActive;
+        set
+        {
+            if (_isActive == value)
+            {
+                return;
+            }
+
+            _isActive = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsActive)));
+        }
+    }
+}

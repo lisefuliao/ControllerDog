@@ -32,7 +32,7 @@ public sealed class HidControllerService : IDisposable
                 if (length > 0)
                 {
                     var report = buffer.AsSpan(0, length);
-                    _lastPressedButtons = ParseButtons(report, _deviceInfo);
+                    _lastPressedButtons = NormalizeButtons(ParseButtons(report, _deviceInfo));
                 }
 
                 state = BuildState(length > 0 ? $"HID Report {length} bytes" : "HID 空闲");
@@ -278,6 +278,14 @@ public sealed class HidControllerService : IDisposable
             ControllerType.DualShock4 => ParseDualShock4(report),
             _ => ParseGenericController(report)
         };
+    }
+
+    private static HashSet<string> NormalizeButtons(IEnumerable<string> buttons)
+    {
+        return buttons
+            .Select(ControllerState.NormalizeAlias)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private static HashSet<string> ParseDualShock4(ReadOnlySpan<byte> report)

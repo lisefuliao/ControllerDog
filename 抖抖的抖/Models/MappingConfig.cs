@@ -6,6 +6,12 @@ public sealed class MappingConfig
 
     public string InputMode { get; set; } = "Auto";
 
+    public string ThemeKey { get; set; } = "blue";
+
+    public string ThemeMode { get; set; } = "light";
+
+    public string ControllerAppearanceKey { get; set; } = "minimal";
+
     public List<MappingEntry> Mappings { get; set; } = new();
 
     public static MappingConfig CreateDefault()

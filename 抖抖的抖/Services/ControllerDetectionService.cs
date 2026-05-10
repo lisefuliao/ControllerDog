@@ -30,7 +30,8 @@ public sealed class ControllerDetectionService
 
     public ControllerDetectionInfo DetectBest()
     {
-        if (_xInputControllerService.TryGetFirstConnectedState(out var xInputState))
+        if (_xInputControllerService.TryGetFirstConnectedIndex(out var xInputIndex)
+            && _xInputControllerService.TryGetState(xInputIndex, out var xInputState))
         {
             return new ControllerDetectionInfo(
                 xInputState.DeviceName,

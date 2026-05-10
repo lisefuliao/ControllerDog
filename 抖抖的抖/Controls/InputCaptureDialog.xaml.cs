@@ -8,6 +8,9 @@ namespace DouDouDeDou.Controls;
 public partial class InputCaptureDialog : Window
 {
     private bool _isCapturing;
+    private bool _shownAsync;
+    private bool? _asyncResult;
+    private TaskCompletionSource<bool?>? _completionSource;
 
     public InputCaptureDialog(InputTarget currentTarget)
     {
@@ -17,6 +20,21 @@ public partial class InputCaptureDialog : Window
     }
 
     public InputTarget? SelectedTarget { get; private set; }
+
+    public Task<bool?> ShowCaptureAsync(Window? owner)
+    {
+        Owner = owner;
+        _shownAsync = true;
+        _completionSource = new TaskCompletionSource<bool?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Closed += OnDialogClosed;
+        Show();
+        Dispatcher.BeginInvoke(() =>
+        {
+            Activate();
+            Keyboard.Focus(this);
+        });
+        return _completionSource.Task;
+    }
 
     private void OnTargetButtonClick(object sender, RoutedEventArgs e)
     {
@@ -30,7 +48,12 @@ public partial class InputCaptureDialog : Window
     {
         _isCapturing = true;
         CaptureBanner.Opacity = 1.0;
-        Keyboard.Focus(this);
+        if (CaptureBanner.Child is System.Windows.Controls.TextBlock textBlock)
+        {
+            textBlock.Text = "请按下手柄或键盘按键";
+        }
+
+        Dispatcher.BeginInvoke(() => Keyboard.Focus(this));
     }
 
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
@@ -114,13 +137,30 @@ public partial class InputCaptureDialog : Window
 
     private void OnCancelClick(object sender, RoutedEventArgs e)
     {
-        DialogResult = false;
-        Close();
+        CloseWithResult(false);
     }
 
     private void OnOkClick(object sender, RoutedEventArgs e)
     {
-        DialogResult = SelectedTarget is not null;
+        CloseWithResult(SelectedTarget is not null);
+    }
+
+    private void CloseWithResult(bool result)
+    {
+        if (_shownAsync)
+        {
+            _asyncResult = result;
+            Close();
+            return;
+        }
+
+        DialogResult = result;
         Close();
+    }
+
+    private void OnDialogClosed(object? sender, EventArgs e)
+    {
+        Closed -= OnDialogClosed;
+        _completionSource?.TrySetResult(_asyncResult ?? false);
     }
 }
