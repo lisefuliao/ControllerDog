@@ -10,7 +10,6 @@
 
 [下载最新版本](https://github.com/lisefuliao/ControllerDog/releases/latest)
 
-下载后双击运行 `抖抖的抖.exe`。
 
 ## 当前功能
 
