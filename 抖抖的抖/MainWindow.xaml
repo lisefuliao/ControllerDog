@@ -3,20 +3,23 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:controls="clr-namespace:DouDouDeDou.Controls"
         Title="抖抖的抖"
-        Width="1380"
-        Height="840"
-        MinWidth="1180"
-        MinHeight="720"
+        Width="1440"
+        Height="850"
+        MinWidth="1220"
+        MinHeight="740"
+        Icon="Assets/Icons/app-icon.png"
         FontFamily="Microsoft YaHei UI"
-        Background="{StaticResource BackgroundBrush}">
-    <Grid Margin="22">
+        Background="{DynamicResource BackgroundBrush}"
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True">
+    <Grid Margin="24">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Style="{StaticResource CardStyle}" Padding="16">
+        <Border Grid.Row="0" Style="{StaticResource CardStyle}" Padding="12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -25,138 +28,200 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="抖抖的抖"
-                               FontSize="24"
-                               FontWeight="Bold"
-                               Foreground="{StaticResource TextPrimaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,18,0" />
-                    <Button Content="开始映射"
-                            Command="{Binding StartMappingCommand}"
-                            Style="{StaticResource PrimaryButtonStyle}"
-                            Margin="0,0,10,0" />
-                    <Button Content="停止映射"
-                            Command="{Binding StopMappingCommand}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Margin="0,0,10,0" />
-                    <Button Content="保存配置"
-                            Command="{Binding SaveConfigCommand}"
-                            Style="{StaticResource SecondaryButtonStyle}"
-                            Margin="0,0,10,0" />
-                    <Button Content="加载配置"
-                            Command="{Binding LoadConfigCommand}"
-                            Style="{StaticResource SecondaryButtonStyle}" />
+                    <Border Width="44" Height="44" CornerRadius="12" Background="{DynamicResource SoftPinkBrush}" ClipToBounds="True" Margin="0,0,14,0">
+                        <Image Source="Assets/Icons/app-icon.png" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel Margin="0,0,26,0" VerticalAlignment="Center">
+                        <TextBlock Text="抖抖的抖" FontSize="21" FontWeight="Bold" Foreground="{DynamicResource TextPrimaryBrush}" />
+                        <TextBlock Text="v0.5 UI Preview" FontSize="12" Foreground="{DynamicResource TextSecondaryBrush}" />
+                    </StackPanel>
+
+                    <Button Content="▶  开始映射" Command="{Binding StartMappingCommand}" Style="{StaticResource ToolbarPrimaryIconTextButtonStyle}" MinWidth="132" Margin="0,0,12,0" />
+                    <Button Content="■  停止映射" Command="{Binding StopMappingCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" MinWidth="122" Margin="0,0,12,0" />
+                    <Button Content="▣  保存配置" Command="{Binding SaveConfigCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" MinWidth="122" Margin="0,0,12,0" />
+                    <Button Content="▱  加载配置" Command="{Binding LoadConfigCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" MinWidth="122" />
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="轮询率"
-                               Foreground="{StaticResource TextSecondaryBrush}"
-                               VerticalAlignment="Center"
-                               Margin="0,0,10,0" />
-                    <ComboBox Width="250"
-                              ItemsSource="{Binding PollingRates}"
-                              SelectedItem="{Binding SelectedPollingRate, Mode=TwoWay}" />
+                    <TextBlock Text="轮询率" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <ComboBox Width="132" ItemsSource="{Binding PollingRates}" SelectedItem="{Binding SelectedPollingRate, Mode=TwoWay}" Margin="0,0,18,0" />
+                    <Button Content="{Binding ThemeModeIcon}" Command="{Binding ToggleThemeModeCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" ToolTip="{Binding ThemeModeText}" MinWidth="48" FontSize="18" Margin="0,0,10,0" />
+                    <Button Content="{Binding HotspotCalibrationText}" Command="{Binding ToggleHotspotCalibrationCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" MinWidth="86" FontSize="13" Margin="0,0,10,0" />
+                    <Button Content="⚙" Command="{Binding OpenSettingsCommand}" Style="{StaticResource ToolbarIconTextButtonStyle}" ToolTip="设置" MinWidth="48" FontSize="16" Margin="0,0,14,0" />
+
+                    <ItemsControl ItemsSource="{Binding Themes}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding DataContext.SelectThemeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        CommandParameter="{Binding}"
+                                        Width="24"
+                                        Height="24"
+                                        Padding="0"
+                                        Margin="0,0,7,0"
+                                        BorderThickness="0"
+                                        Background="Transparent"
+                                        ToolTip="{Binding DisplayName}">
+                                    <Grid>
+                                        <Ellipse Fill="{Binding PreviewBrush}" />
+                                        <Ellipse Stroke="#FFFFFFFF" StrokeThickness="2" Margin="3" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1" Margin="0,18,0,12">
+        <Grid Grid.Row="1" Margin="0,16,0,12">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="286" />
+                <ColumnDefinition Width="300" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="370" />
+                <ColumnDefinition Width="380" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Style="{StaticResource CardStyle}">
-                <DockPanel LastChildFill="True">
-                    <TextBlock DockPanel.Dock="Top" Text="状态" Style="{StaticResource SectionTitleStyle}" />
-                    <StackPanel>
-                        <controls:StatusBadge Label="当前设备" Value="{Binding CurrentDevice}" />
-                        <controls:StatusBadge Label="手柄类型" Value="{Binding ControllerTypeText}" />
-                        <controls:StatusBadge Label="输入模式" Value="{Binding InputModeText}" />
-                        <controls:StatusBadge Label="连接状态" Value="{Binding ConnectionStatusText}" />
-                        <controls:StatusBadge Label="当前轮询率" Value="{Binding CurrentPollingRateText}" />
-                        <controls:StatusBadge Label="实际循环频率" Value="{Binding ActualFrequencyText}" />
-                        <controls:StatusBadge Label="平均延迟" Value="{Binding AverageLatencyText}" />
-                        <controls:StatusBadge Label="异常计数" Value="{Binding ExceptionCountText}" />
-                        <controls:StatusBadge Label="防粘键状态" Value="{Binding AntiStickyStatusText}" />
-                        <controls:StatusBadge Label="映射状态" Value="{Binding MappingStatusText}" />
-                    </StackPanel>
-                </DockPanel>
-            </Border>
+            <StackPanel Grid.Column="0">
+                <Border Style="{StaticResource CardStyle}" Margin="0,0,0,14">
+                    <DockPanel LastChildFill="True">
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,14">
+                            <TextBlock Text="设备状态" Style="{StaticResource SectionTitleStyle}" Margin="0" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <Ellipse Width="9" Height="9" Fill="{DynamicResource SuccessBrush}" Margin="0,0,8,0" />
+                                <TextBlock Text="{Binding ConnectionStatusText}" Foreground="{DynamicResource SuccessBrush}" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel>
+                            <controls:StatusBadge Label="当前设备" Value="{Binding CurrentDevice}" />
+                            <controls:StatusBadge Label="手柄类型" Value="{Binding ControllerTypeText}" />
+                            <controls:StatusBadge Label="输入模式" Value="{Binding InputModeText}" />
+                            <controls:StatusBadge Label="当前轮询率" Value="{Binding CurrentPollingRateText}" />
+                            <controls:StatusBadge Label="实际循环频率" Value="{Binding ActualFrequencyText}" />
+                            <controls:StatusBadge Label="平均延迟" Value="{Binding AverageLatencyText}" />
+                            <controls:StatusBadge Label="异常计数" Value="{Binding ExceptionCountText}" />
+                            <controls:StatusBadge Label="防粘键状态" Value="{Binding AntiStickyStatusText}" />
+                            <controls:StatusBadge Label="映射状态" Value="{Binding MappingStatusText}" />
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
 
-            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="18,0">
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel>
+                        <TextBlock Text="控制器识别" Style="{StaticResource SectionTitleStyle}" />
+                        <Border CornerRadius="12" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1.5" Background="{DynamicResource SoftPinkBrush}" Padding="14" Margin="0,0,0,12">
+                            <TextBlock Text="{Binding ControllerTypeText}" Foreground="{DynamicResource AccentBrush}" FontWeight="Bold" HorizontalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="Auto 模式会优先读取 XInput，未检测到时自动回落到 HID / DS4。"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
+                                   FontSize="12"
+                                   LineHeight="20" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <Border Grid.Column="1" Style="{StaticResource CardStyle}" Margin="16,0">
                 <DockPanel LastChildFill="True">
-                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
-                        <TextBlock Text="点击手柄按键设置映射" Style="{StaticResource SectionTitleStyle}" Margin="0" />
-                        <TextBlock Text="点一下图上的 A / B / X / Y / LT / 方向键等，再在弹出的键盘或鼠标图上选择目标。"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
+                    <StackPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                        <TextBlock Text="控制器预览（点击按键进行映射）" Style="{StaticResource SectionTitleStyle}" Margin="0" />
+                        <TextBlock Text="点击手柄上的按键，再在键盘、鼠标或组合键中选择目标输入。"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
                                    FontSize="13"
                                    Margin="0,6,0,0" />
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom" Margin="0,12,0,0">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                            <Ellipse Width="10" Height="10" Fill="{DynamicResource AccentBrush}" Margin="0,0,8,0" />
+                            <TextBlock Text="已按下" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,24,0" />
+                            <Ellipse Width="10" Height="10" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" Fill="Transparent" Margin="0,0,8,0" />
+                            <TextBlock Text="悬停 / 可点击" Foreground="{DynamicResource TextSecondaryBrush}" Margin="0,0,24,0" />
+                            <Ellipse Width="10" Height="10" Fill="{DynamicResource DisabledBrush}" Margin="0,0,8,0" />
+                            <TextBlock Text="未连接" Foreground="{DynamicResource TextSecondaryBrush}" />
+                        </StackPanel>
                     </StackPanel>
 
                     <controls:ControllerPreviewControl ControllerType="{Binding PreviewControllerType}"
                                                        PressedButtons="{Binding PressedButtonNames}"
                                                        ButtonCommand="{Binding SelectSourceButtonCommand}"
-                                                       MinHeight="520"
+                                                       AppearanceStyle="{Binding SelectedControllerAppearanceKey}"
+                                                       IsCalibrationMode="{Binding IsHotspotCalibrationMode}"
+                                                       MinHeight="500"
                                                        Margin="8" />
                 </DockPanel>
             </Border>
 
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="210" />
-                    <RowDefinition Height="*" />
+                    <RowDefinition Height="250" />
+                    <RowDefinition Height="{Binding LogPanelHeight}" />
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0" Style="{StaticResource CardStyle}" Margin="0,0,0,14">
                     <DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="实时按键状态" Style="{StaticResource SectionTitleStyle}" />
-                        <ScrollViewer VerticalScrollBarVisibility="Auto">
-                            <ItemsControl ItemsSource="{Binding PressedButtonNames}">
+                        <Border CornerRadius="16" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" Background="{DynamicResource CardBrush}" Padding="14">
+                            <ItemsControl ItemsSource="{Binding LiveButtonStates}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <WrapPanel />
+                                        <UniformGrid Columns="3" />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="{StaticResource SoftPinkBrush}"
-                                                BorderBrush="{StaticResource BorderBrushSoft}"
-                                                BorderThickness="1"
-                                                CornerRadius="9"
-                                                Padding="10,5"
-                                                Margin="0,0,8,8">
-                                            <TextBlock Text="{Binding}"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{StaticResource TextPrimaryBrush}" />
+                                        <Border x:Name="ButtonChip" CornerRadius="12" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" Background="{DynamicResource DisabledBrush}" Padding="8,6" Margin="0,0,8,8">
+                                            <TextBlock x:Name="ChipText" Text="{Binding Label}" Foreground="{DynamicResource TextPrimaryBrush}" FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                         </Border>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                <Setter TargetName="ButtonChip" Property="Background" Value="{DynamicResource AccentBrush}" />
+                                                <Setter TargetName="ButtonChip" Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+                                                <Setter TargetName="ChipText" Property="Foreground" Value="White" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </ScrollViewer>
+                        </Border>
                     </DockPanel>
                 </Border>
 
                 <Border Grid.Row="1" Style="{StaticResource CardStyle}">
                     <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="运行日志" Style="{StaticResource SectionTitleStyle}" />
-                        <ListBox ItemsSource="{Binding Logs}"
-                                 BorderThickness="0"
-                                 Background="Transparent"
-                                 FontFamily="Consolas"
-                                 FontSize="12"
-                                 Foreground="{StaticResource TextSecondaryBrush}"
-                                 ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        <Grid DockPanel.Dock="Top" Margin="0,0,0,12">
+                            <TextBlock Text="运行日志" Style="{StaticResource SectionTitleStyle}" Margin="0" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="{Binding LogToggleText}" Command="{Binding ToggleLogsCommand}" Style="{StaticResource TinyButtonStyle}" Margin="0,0,8,0" />
+                                <Button Content="清空" Command="{Binding ClearLogsCommand}" Style="{StaticResource TinyButtonStyle}" />
+                            </StackPanel>
+                        </Grid>
+                        <Border Visibility="{Binding LogListVisibility}" CornerRadius="14" BorderBrush="{DynamicResource BorderBrushSoft}" BorderThickness="1" Background="{DynamicResource CardBrush}" Padding="10">
+                            <ListBox ItemsSource="{Binding Logs}"
+                                     BorderThickness="0"
+                                     Background="Transparent"
+                                     FontFamily="Consolas"
+                                     FontSize="12"
+                                     Foreground="{DynamicResource TextSecondaryBrush}"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                        </Border>
                     </DockPanel>
                 </Border>
             </Grid>
         </Grid>
 
-        <TextBlock Grid.Row="2"
-                   Text="作者：马德锦大神"
-                   HorizontalAlignment="Right"
-                   Foreground="{StaticResource TextSecondaryBrush}"
-                   FontSize="12" />
+        <Grid Grid.Row="2">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                <Ellipse Width="10" Height="10" Fill="{DynamicResource SuccessBrush}" Margin="0,0,8,0" />
+                <TextBlock Text="一切运行正常" Foreground="{DynamicResource SuccessBrush}" FontSize="12" />
+            </StackPanel>
+            <TextBlock Text="作者：马德锦大神    |    感谢使用抖抖的抖"
+                       HorizontalAlignment="Right"
+                       Foreground="{DynamicResource TextSecondaryBrush}"
+                       FontSize="12" />
+        </Grid>
     </Grid>
 </Window>

@@ -2,6 +2,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using DouDouDeDou.Models;
 using DouDouDeDou.Utils;
 
@@ -11,11 +13,11 @@ public sealed class InputCaptureDialog : Window
 {
     private readonly List<Button> _targetButtons = new();
     private readonly Brush _normalButtonBrush = Brushes.White;
-    private readonly Brush _selectedButtonBrush = new SolidColorBrush(Color.FromRgb(233, 133, 163));
-    private readonly Brush _normalTextBrush = new SolidColorBrush(Color.FromRgb(48, 48, 48));
+    private readonly Brush _selectedButtonBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235));
+    private readonly Brush _normalTextBrush = new SolidColorBrush(Color.FromRgb(32, 42, 56));
     private readonly Brush _selectedTextBrush = Brushes.White;
-    private readonly Brush _normalBorderBrush = new SolidColorBrush(Color.FromRgb(188, 188, 188));
-    private readonly Brush _selectedBorderBrush = new SolidColorBrush(Color.FromRgb(191, 75, 112));
+    private readonly Brush _normalBorderBrush = new SolidColorBrush(Color.FromRgb(215, 224, 236));
+    private readonly Brush _selectedBorderBrush = new SolidColorBrush(Color.FromRgb(37, 99, 235));
     private TextBlock _currentTargetText = null!;
     private Border _captureBanner = null!;
     private bool _isCapturing;
@@ -27,19 +29,20 @@ public sealed class InputCaptureDialog : Window
         SelectedTarget = currentTarget.Clone();
 
         Title = "选择映射目标";
-        Width = 1040;
-        Height = 560;
-        MinWidth = 920;
-        MinHeight = 500;
+        Width = 1060;
+        Height = 640;
+        MinWidth = 940;
+        MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         FontFamily = new FontFamily("Microsoft YaHei UI");
-        Background = new SolidColorBrush(Color.FromRgb(246, 246, 246));
+        Background = new SolidColorBrush(Color.FromRgb(246, 248, 252));
+        Icon = new BitmapImage(new Uri("pack://application:,,,/Assets/Icons/app-icon.png", UriKind.Absolute));
 
         PreviewKeyDown += OnPreviewKeyDown;
         PreviewMouseDown += OnPreviewMouseDown;
 
-        var root = new Grid { Margin = new Thickness(12) };
+        var root = new Grid { Margin = new Thickness(18) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -52,10 +55,10 @@ public sealed class InputCaptureDialog : Window
         {
             Background = Brushes.Transparent,
             BorderThickness = new Thickness(0),
-            Margin = new Thickness(0, 10, 0, 10)
+            Margin = new Thickness(0, 14, 0, 14)
         };
-        tabs.Items.Add(new TabItem { Header = "主键盘", Content = BuildKeyboardPanel() });
-        tabs.Items.Add(new TabItem { Header = "功能键/数字/鼠标", Content = BuildExtendedPanel() });
+        tabs.Items.Add(new TabItem { Header = "主键盘", Content = WrapPanelCard(BuildKeyboardPanel()) });
+        tabs.Items.Add(new TabItem { Header = "功能键 / 数字 / 鼠标", Content = WrapPanelCard(BuildExtendedPanel()) });
         Grid.SetRow(tabs, 1);
         root.Children.Add(tabs);
 
@@ -89,32 +92,35 @@ public sealed class InputCaptureDialog : Window
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var stack = new StackPanel();
         stack.Children.Add(new TextBlock
         {
-            Text = "选择要映射到的键盘或鼠标按键",
-            FontSize = 20,
+            Text = "设置映射",
+            FontSize = 24,
             FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(43, 43, 43))
+            Foreground = new SolidColorBrush(Color.FromRgb(24, 32, 45))
+        });
+        stack.Children.Add(new TextBlock
+        {
+            Text = "选择将手柄按键映射到的键盘、鼠标或组合键。",
+            Margin = new Thickness(0, 6, 0, 0),
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Color.FromRgb(91, 101, 116))
         });
 
         _currentTargetText = new TextBlock
         {
-            Margin = new Thickness(0, 6, 0, 0),
-            Foreground = new SolidColorBrush(Color.FromRgb(106, 95, 100))
+            Margin = new Thickness(0, 10, 0, 0),
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235))
         };
         stack.Children.Add(_currentTargetText);
         grid.Children.Add(stack);
 
-        var capture = new Button
-        {
-            Content = "直接按键捕获",
-            MinWidth = 128,
-            Padding = new Thickness(14, 8, 14, 8),
-            Margin = new Thickness(12, 0, 0, 0)
-        };
+        var capture = CreateActionButton("直接按键捕获", false);
+        capture.MinWidth = 138;
+        capture.Margin = new Thickness(12, 0, 0, 0);
         capture.Click += OnStartCaptureClick;
         Grid.SetColumn(capture, 1);
         grid.Children.Add(capture);
@@ -122,25 +128,38 @@ public sealed class InputCaptureDialog : Window
         return grid;
     }
 
+    private Border WrapPanelCard(UIElement child)
+    {
+        return new Border
+        {
+            Background = Brushes.White,
+            BorderBrush = _normalBorderBrush,
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(18),
+            Padding = new Thickness(18),
+            Child = child
+        };
+    }
+
     private FrameworkElement BuildKeyboardPanel()
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var panel = new StackPanel();
         panel.Children.Add(BuildKeyboardRow(("Esc", "Escape", 62), ("F1", "F1", 62), ("F2", "F2", 62), ("F3", "F3", 62), ("F4", "F4", 62), ("F5", "F5", 62), ("F6", "F6", 62), ("F7", "F7", 62), ("F8", "F8", 62), ("F9", "F9", 62), ("F10", "F10", 62), ("F11", "F11", 62), ("F12", "F12", 62)));
         panel.Children.Add(BuildKeyboardRow(("~\n`", "Oem3", 62), ("!\n1", "1", 62), ("@\n2", "2", 62), ("#\n3", "3", 62), ("$\n4", "4", 62), ("%\n5", "5", 62), ("^\n6", "6", 62), ("&\n7", "7", 62), ("*\n8", "8", 62), ("(\n9", "9", 62), (")\n0", "0", 62), ("-\n_", "OemMinus", 62), ("+\n=", "OemPlus", 62), ("Backspace", "Back", 116)));
         panel.Children.Add(BuildKeyboardRow(("Tab", "Tab", 96), ("Q", "Q", 62), ("W", "W", 62), ("E", "E", 62), ("R", "R", 62), ("T", "T", 62), ("Y", "Y", 62), ("U", "U", 62), ("I", "I", 62), ("O", "O", 62), ("P", "P", 62), ("{\n[", "OemOpenBrackets", 62), ("}\n]", "OemCloseBrackets", 62), ("|\n\\", "OemBackslash", 86)));
-        panel.Children.Add(BuildKeyboardRow(("CapsLock", "CapsLock", 112), ("A", "A", 62), ("S", "S", 62), ("D", "D", 62), ("F", "F", 62), ("G", "G", 62), ("H", "H", 62), ("J", "J", 62), ("K", "K", 62), ("L", "L", 62), (":\n;", "OemSemicolon", 62), ("\"\n'", "OemQuotes", 62), ("Enter", "Enter", 130)));
-        panel.Children.Add(BuildKeyboardRow(("Shift（左）", "LeftShift", 156), ("Z", "Z", 62), ("X", "X", 62), ("C", "C", 62), ("V", "V", 62), ("B", "B", 62), ("N", "N", 62), ("M", "M", 62), ("<\n,", "OemComma", 62), (">\n.", "OemPeriod", 62), ("?\n/", "OemQuestion", 62), ("Shift（右）", "RightShift", 162)));
-        panel.Children.Add(BuildKeyboardRow(("Ctrl（左）", "LeftCtrl", 96), ("Win（左）", "LWin", 82), ("Alt（左）", "LeftAlt", 82), ("Space", "Space", 408), ("Alt（右）", "RightAlt", 82), ("Win（右）", "RWin", 82), ("Apps", "Apps", 82), ("Ctrl（右）", "RightCtrl", 96)));
+        panel.Children.Add(BuildKeyboardRow(("Caps", "CapsLock", 112), ("A", "A", 62), ("S", "S", 62), ("D", "D", 62), ("F", "F", 62), ("G", "G", 62), ("H", "H", 62), ("J", "J", 62), ("K", "K", 62), ("L", "L", 62), (":\n;", "OemSemicolon", 62), ("\"\n'", "OemQuotes", 62), ("Enter", "Enter", 130)));
+        panel.Children.Add(BuildKeyboardRow(("Shift", "LeftShift", 156), ("Z", "Z", 62), ("X", "X", 62), ("C", "C", 62), ("V", "V", 62), ("B", "B", 62), ("N", "N", 62), ("M", "M", 62), ("<\n,", "OemComma", 62), (">\n.", "OemPeriod", 62), ("?\n/", "OemQuestion", 62), ("Shift", "RightShift", 162)));
+        panel.Children.Add(BuildKeyboardRow(("Ctrl", "LeftCtrl", 96), ("Win", "LWin", 82), ("Alt", "LeftAlt", 82), ("Space", "Space", 408), ("Alt", "RightAlt", 82), ("Win", "RWin", 82), ("Apps", "Apps", 82), ("Ctrl", "RightCtrl", 96)));
         return panel;
     }
 
     private FrameworkElement BuildExtendedPanel()
     {
-        var root = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+        var root = new Grid();
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
         root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
         var nav = new StackPanel();
@@ -168,14 +187,14 @@ public sealed class InputCaptureDialog : Window
             Text = "鼠标按键",
             FontSize = 18,
             FontWeight = FontWeights.Bold,
-            Foreground = new SolidColorBrush(Color.FromRgb(43, 43, 43)),
-            Margin = new Thickness(0, 0, 0, 12)
+            Foreground = new SolidColorBrush(Color.FromRgb(24, 32, 45)),
+            Margin = new Thickness(0, 0, 0, 14)
         });
-        mouse.Children.Add(BuildMouseButton("鼠标左键", "LeftButton", 160));
-        mouse.Children.Add(BuildMouseButton("鼠标右键", "RightButton", 160));
-        mouse.Children.Add(BuildMouseButton("鼠标中键", "MiddleButton", 160));
-        mouse.Children.Add(BuildMouseButton("侧键 1", "XButton1", 160));
-        mouse.Children.Add(BuildMouseButton("侧键 2", "XButton2", 160));
+        mouse.Children.Add(BuildMouseButton("鼠标左键", "LeftButton", 170));
+        mouse.Children.Add(BuildMouseButton("鼠标右键", "RightButton", 170));
+        mouse.Children.Add(BuildMouseButton("鼠标中键", "MiddleButton", 170));
+        mouse.Children.Add(BuildMouseButton("侧键 1", "XButton1", 170));
+        mouse.Children.Add(BuildMouseButton("侧键 2", "XButton2", 170));
         root.Children.Add(mouse);
 
         return root;
@@ -199,19 +218,7 @@ public sealed class InputCaptureDialog : Window
             Kind = InputTargetKind.Keyboard,
             Value = KeyCodeHelper.NormalizeKeyboardTarget(value)
         };
-        var button = new Button
-        {
-            Content = text,
-            Tag = target,
-            Width = width,
-            Height = 50,
-            Margin = new Thickness(0, 0, 6, 0),
-            FontSize = 15,
-            Background = _normalButtonBrush,
-            BorderBrush = _normalBorderBrush,
-            Foreground = _normalTextBrush
-        };
-        button.Click += (_, _) => SelectTarget(target.Clone());
+        var button = BuildTargetButton(text, target, width, 48, new Thickness(0, 0, 7, 0));
         _targetButtons.Add(button);
         ApplySelectedStyle(button, target);
         return button;
@@ -220,21 +227,34 @@ public sealed class InputCaptureDialog : Window
     private Button BuildMouseButton(string text, string value, double width)
     {
         var target = new InputTarget { Kind = InputTargetKind.Mouse, Value = value };
+        var button = BuildTargetButton(text, target, width, 44, new Thickness(0, 0, 0, 10));
+        _targetButtons.Add(button);
+        ApplySelectedStyle(button, target);
+        return button;
+    }
+
+    private Button BuildTargetButton(string text, InputTarget target, double width, double height, Thickness margin)
+    {
         var button = new Button
         {
             Content = text,
             Tag = target,
             Width = width,
-            Height = 46,
-            Margin = new Thickness(0, 0, 0, 10),
-            FontSize = 15,
+            Height = height,
+            Margin = margin,
+            FontSize = 14,
+            Style = Application.Current.TryFindResource("SecondaryButtonStyle") as Style,
             Background = _normalButtonBrush,
             BorderBrush = _normalBorderBrush,
-            Foreground = _normalTextBrush
+            Foreground = _normalTextBrush,
+            RenderTransformOrigin = new Point(0.5, 0.5),
+            RenderTransform = new ScaleTransform(1, 1)
         };
         button.Click += (_, _) => SelectTarget(target.Clone());
-        _targetButtons.Add(button);
-        ApplySelectedStyle(button, target);
+        button.MouseEnter += (_, _) => AnimateButton(button, 1.025, 120);
+        button.MouseLeave += (_, _) => AnimateButton(button, 1.0, 120);
+        button.PreviewMouseLeftButtonDown += (_, _) => AnimateButton(button, 0.965, 90);
+        button.PreviewMouseLeftButtonUp += (_, _) => AnimateButton(button, 1.025, 90);
         return button;
     }
 
@@ -243,13 +263,14 @@ public sealed class InputCaptureDialog : Window
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         _captureBanner = new Border
         {
             Padding = new Thickness(14, 9, 14, 9),
             CornerRadius = new CornerRadius(12),
-            Background = new SolidColorBrush(Color.FromRgb(255, 241, 245)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(237, 207, 217)),
+            Background = new SolidColorBrush(Color.FromRgb(234, 242, 255)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(193, 215, 255)),
             BorderThickness = new Thickness(1),
             Opacity = 0,
             HorizontalAlignment = HorizontalAlignment.Left
@@ -259,35 +280,19 @@ public sealed class InputCaptureDialog : Window
             Text = "请按下手柄或键盘按键",
             FontSize = 14,
             FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(191, 75, 112))
+            Foreground = new SolidColorBrush(Color.FromRgb(37, 99, 235))
         };
         grid.Children.Add(_captureBanner);
 
-        var cancel = new Button
-        {
-            Content = "取消",
-            MinWidth = 180,
-            Height = 38,
-            FontSize = 15,
-            Background = Brushes.White,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(188, 188, 188)),
-            Margin = new Thickness(0, 0, 10, 0)
-        };
+        var cancel = CreateActionButton("取消", false);
+        cancel.MinWidth = 170;
+        cancel.Margin = new Thickness(0, 0, 10, 0);
         cancel.Click += OnCancelClick;
         Grid.SetColumn(cancel, 1);
         grid.Children.Add(cancel);
 
-        var done = new Button
-        {
-            Content = "完成",
-            MinWidth = 180,
-            Height = 38,
-            FontSize = 15,
-            FontWeight = FontWeights.Bold,
-            Background = new SolidColorBrush(Color.FromRgb(233, 133, 163)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(191, 75, 112)),
-            Foreground = Brushes.White
-        };
+        var done = CreateActionButton("完成", true);
+        done.MinWidth = 190;
         done.Click += OnDoneClick;
         Grid.SetColumn(done, 2);
         grid.Children.Add(done);
@@ -295,10 +300,23 @@ public sealed class InputCaptureDialog : Window
         return grid;
     }
 
+    private Button CreateActionButton(string text, bool primary)
+    {
+        return new Button
+        {
+            Content = text,
+            Height = 40,
+            Padding = new Thickness(16, 8, 16, 8),
+            FontSize = 15,
+            FontWeight = FontWeights.SemiBold,
+            Style = Application.Current.TryFindResource(primary ? "PrimaryButtonStyle" : "SecondaryButtonStyle") as Style
+        };
+    }
+
     private void OnStartCaptureClick(object sender, RoutedEventArgs e)
     {
         _isCapturing = true;
-        _captureBanner.Opacity = 1.0;
+        _captureBanner.BeginAnimation(OpacityProperty, new DoubleAnimation(1.0, TimeSpan.FromMilliseconds(140)));
         Dispatcher.BeginInvoke(() => Keyboard.Focus(this));
     }
 
@@ -353,7 +371,7 @@ public sealed class InputCaptureDialog : Window
     {
         SelectedTarget = target;
         _isCapturing = false;
-        _captureBanner.Opacity = 0.0;
+        _captureBanner.BeginAnimation(OpacityProperty, new DoubleAnimation(0.0, TimeSpan.FromMilliseconds(140)));
         UpdateCurrentText();
         RefreshSelectedHighlights();
     }
@@ -408,5 +426,23 @@ public sealed class InputCaptureDialog : Window
     {
         Closed -= OnDialogClosed;
         _completionSource?.TrySetResult(_asyncResult ?? false);
+    }
+
+    private static void AnimateButton(Button button, double scale, int milliseconds)
+    {
+        if (button.RenderTransform is not ScaleTransform transform)
+        {
+            transform = new ScaleTransform(1, 1);
+            button.RenderTransform = transform;
+        }
+
+        var animation = new DoubleAnimation(scale, TimeSpan.FromMilliseconds(milliseconds))
+        {
+            EasingFunction = milliseconds <= 90
+                ? new QuadraticEase { EasingMode = EasingMode.EaseOut }
+                : new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        transform.BeginAnimation(ScaleTransform.ScaleXProperty, animation);
+        transform.BeginAnimation(ScaleTransform.ScaleYProperty, animation);
     }
 }

@@ -140,7 +140,7 @@ public sealed class ControllerInputService : IDisposable
                 if (ShouldPublishState(state))
                 {
                     _lastPublishedState = state.Clone();
-                    StateReceived?.Invoke(this, state);
+                    PublishState(state);
                 }
 
                 loopCounter++;
@@ -148,7 +148,7 @@ public sealed class ControllerInputService : IDisposable
                 if (metricsStopwatch.ElapsedMilliseconds >= 250)
                 {
                     var actualHz = loopCounter * 1000.0 / Math.Max(1, metricsStopwatch.ElapsedMilliseconds);
-                    MetricsUpdated?.Invoke(this, new InputMetrics(currentRate, actualHz, latencyAverage, Interlocked.Read(ref _exceptionCount)));
+                    PublishMetrics(new InputMetrics(currentRate, actualHz, latencyAverage, Interlocked.Read(ref _exceptionCount)));
                     loopCounter = 0;
                     metricsStopwatch.Restart();
                 }
@@ -162,6 +162,32 @@ public sealed class ControllerInputService : IDisposable
                 Log?.Invoke($"输入线程异常，已触发安全释放：{ex.Message}");
                 Thread.Sleep(20);
             }
+        }
+    }
+
+    private void PublishState(ControllerState state)
+    {
+        try
+        {
+            StateReceived?.Invoke(this, state);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _exceptionCount);
+            Log?.Invoke($"状态订阅处理异常，已忽略 UI 侧错误：{ex.Message}");
+        }
+    }
+
+    private void PublishMetrics(InputMetrics metrics)
+    {
+        try
+        {
+            MetricsUpdated?.Invoke(this, metrics);
+        }
+        catch (Exception ex)
+        {
+            Interlocked.Increment(ref _exceptionCount);
+            Log?.Invoke($"性能指标订阅处理异常，已忽略 UI 侧错误：{ex.Message}");
         }
     }
 
