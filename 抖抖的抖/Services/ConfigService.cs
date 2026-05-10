@@ -83,6 +83,9 @@ public sealed class ConfigService
             ? config.PollingRateHz
             : 1000;
         config.InputMode = string.IsNullOrWhiteSpace(config.InputMode) ? "Auto" : config.InputMode;
+        config.ThemeKey = string.IsNullOrWhiteSpace(config.ThemeKey) ? "blue" : config.ThemeKey;
+        config.ThemeMode = string.IsNullOrWhiteSpace(config.ThemeMode) ? "light" : config.ThemeMode;
+        config.ControllerAppearanceKey = string.IsNullOrWhiteSpace(config.ControllerAppearanceKey) ? "minimal" : config.ControllerAppearanceKey;
         config.Mappings ??= new List<MappingEntry>();
 
         foreach (var mapping in config.Mappings)

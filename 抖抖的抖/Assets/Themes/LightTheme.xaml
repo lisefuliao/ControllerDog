@@ -1,0 +1,7 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <SolidColorBrush x:Key="ThemeBackgroundBrush" Color="#F6F8FC" />
+    <SolidColorBrush x:Key="ThemeCardBrush" Color="#FFFFFF" />
+    <SolidColorBrush x:Key="ThemeTextPrimaryBrush" Color="#182234" />
+    <SolidColorBrush x:Key="ThemeTextSecondaryBrush" Color="#687386" />
+</ResourceDictionary>

@@ -10,6 +10,7 @@
                 <ResourceDictionary Source="Themes/ButtonStyles.xaml" />
                 <ResourceDictionary Source="Themes/ComboBoxStyles.xaml" />
                 <ResourceDictionary Source="Themes/DataGridStyles.xaml" />
+                <ResourceDictionary Source="Controls/ToolbarButtons.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

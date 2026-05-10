@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32">
+  <path id="play" d="M8 6v20l17-10z" fill="currentColor"/>
+  <path id="stop" d="M44 8h16v16H44z" fill="currentColor"/>
+  <path id="save" d="M78 6h18l4 4v16H78zM82 8v7h12V8z" fill="currentColor"/>
+  <path id="folder" d="M118 10h12l3 4h19v13h-34z" fill="currentColor"/>
+</svg>

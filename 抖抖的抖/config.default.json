@@ -1,6 +1,9 @@
 {
   "pollingRateHz": 1000,
   "inputMode": "Auto",
+  "themeKey": "blue",
+  "themeMode": "light",
+  "controllerAppearanceKey": "minimal",
   "mappings": [
     {
       "id": "default-l2-right-button",

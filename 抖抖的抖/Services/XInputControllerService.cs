@@ -68,13 +68,11 @@ public sealed class XInputControllerService
         if (gamepad.LeftTrigger >= TriggerThreshold)
         {
             pressed.Add("LT");
-            pressed.Add("L2");
         }
 
         if (gamepad.RightTrigger >= TriggerThreshold)
         {
             pressed.Add("RT");
-            pressed.Add("R2");
         }
 
         state = new ControllerState
@@ -84,8 +82,6 @@ public sealed class XInputControllerService
             ControllerType = ControllerType.XInput,
             InputMode = "XInput",
             XInputUserIndex = (int)userIndex,
-            UsagePage = 0x01,
-            Usage = 0x05,
             PressedButtons = pressed,
             Timestamp = DateTimeOffset.Now,
             RawSummary = $"LT={gamepad.LeftTrigger}, RT={gamepad.RightTrigger}, Buttons={buttons}"

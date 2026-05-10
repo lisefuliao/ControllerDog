@@ -1,0 +1,9 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style x:Key="ControllerHotspotStyle" TargetType="Shape">
+        <Setter Property="Fill" Value="{DynamicResource SoftPinkBrush}" />
+        <Setter Property="Stroke" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="StrokeThickness" Value="1.4" />
+        <Setter Property="Opacity" Value="0.92" />
+    </Style>
+</ResourceDictionary>
