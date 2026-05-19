@@ -8,6 +8,8 @@
         <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}" />
         <Setter Property="FontSize" Value="13" />
         <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="UseLayoutRounding" Value="True" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
@@ -35,9 +37,8 @@
                                                               Margin="{Binding Padding, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                                               VerticalAlignment="Center"
                                                               HorizontalAlignment="Left"
-                                                              Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                                              ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                                              ContentStringFormat="{Binding SelectionBoxItemStringFormat, RelativeSource={RelativeSource AncestorType=ComboBox}}" />
+                                                              Content="{Binding SelectedItem.ShortDisplayName, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                              RecognizesAccessKey="False" />
                                             <Path Grid.Column="1"
                                                   Width="10"
                                                   Height="6"

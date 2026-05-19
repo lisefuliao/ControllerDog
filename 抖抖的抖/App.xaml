@@ -6,8 +6,14 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/Colors.xaml" />
+                <ResourceDictionary Source="Themes/DesignTokens.xaml" />
+                <ResourceDictionary Source="Themes/Icons.xaml" />
                 <ResourceDictionary Source="Themes/CardStyles.xaml" />
+                <ResourceDictionary Source="Themes/Components.xaml" />
                 <ResourceDictionary Source="Themes/ButtonStyles.xaml" />
+                <ResourceDictionary Source="Themes/ChipStyles.xaml" />
+                <ResourceDictionary Source="Themes/InputStyles.xaml" />
+                <ResourceDictionary Source="Themes/NavigationStyles.xaml" />
                 <ResourceDictionary Source="Themes/ComboBoxStyles.xaml" />
                 <ResourceDictionary Source="Themes/DataGridStyles.xaml" />
                 <ResourceDictionary Source="Controls/ToolbarButtons.xaml" />

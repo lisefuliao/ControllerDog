@@ -1,0 +1,24 @@
+# Asset Sources
+
+This file records project-bound UI assets added during the first UI optimization pass.
+
+| Resource | Source URL / Tool | License / Terms | Purpose | File Path |
+|---|---|---|---|---|
+| App brand icon candidate v1 | OpenAI built-in image generation | Generated project asset; prompt saved in `docs/prompts/brand-icon-v1.md` | EXE/title/about branding candidate | `抖抖的抖/Assets/Branding/AppIcon.generated-v1.png` |
+| UI icons first batch sprite | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/ui-icons-first-batch.md` | Reference only; not used as formal UI icons | `抖抖的抖/Assets/UI/Reference/ui-icons-first-batch.png` |
+| Generated icon crops | OpenAI built-in image generation; cropped from first batch sprite | Generated reference assets; prompt saved in `docs/prompts/ui-icons-first-batch.md` | Reference only; formal UI uses vector `Path` resources in `Themes/Icons.xaml` | `抖抖的抖/Assets/UI/Reference/*.generated.png` |
+| Vector UI icons | Self-authored WPF Geometry paths | Project source; no external library | Formal UI icons for navigation and controls | `抖抖的抖/Themes/Icons.xaml` |
+| Empty state: no mappings | OpenAI built-in image generation | Generated project asset; prompt saved in `docs/prompts/empty-no-mappings.md` | Empty mapping list illustration | `抖抖的抖/Assets/UI/Illustrations/empty-no-mappings.png` |
+| Empty state: no controller | OpenAI built-in image generation | Generated project asset; prompt saved in `docs/prompts/empty-no-controller.md` | No controller detected illustration | `抖抖的抖/Assets/UI/Illustrations/empty-no-controller.png` |
+| Main window mockup reference | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/mockup-main-window.md` | Visual reference only | `抖抖的抖/Assets/UI/Mockups/main-window-reference.png` |
+| Settings window mockup reference | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/mockup-settings-window.md` | Visual reference only | `抖抖的抖/Assets/UI/Mockups/settings-window-reference.png` |
+| Input dialog mockup reference | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/mockup-input-dialog.md` | Visual reference only | `抖抖的抖/Assets/UI/Mockups/input-dialog-reference.png` |
+| Xbox controller base images | User-provided local files from `C:/Users/w/Desktop/素材` | User-provided project asset | XInput light/dark controller preview body | `抖抖的抖/Assets/Controllers/Xbox/Base_Light.png`, `抖抖的抖/Assets/Controllers/Xbox/Base_Dark.png` |
+| Xbox button overlay PNGs | User-provided local files from `C:/Users/w/Desktop/素材/Xbox` | User-provided project asset | XInput full-canvas alpha overlays and click hit masks | `抖抖的抖/Assets/Controllers/Xbox/Buttons/*.png` |
+| DSE button overlay PNGs | User-provided local files from `C:/Users/w/Desktop/素材/dse` | User-provided project asset | DualSense Edge full-canvas alpha overlays and click hit masks | `抖抖的抖/Assets/Controllers/DSE/Buttons/*.png` |
+| Phase 2 brand icon candidate | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/phase2-brand-icon-candidate.md`; PNG alpha check reports opaque | Reference only, not formal UI icon | `抖抖的抖/Assets/Branding/AppIcon.phase2-candidate.png` |
+| Phase 2 empty-state reference board | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/phase2-empty-state-illustrations.md`; PNG alpha check reports opaque | Visual reference only | `抖抖的抖/Assets/UI/Reference/phase2-empty-state-reference.png` |
+| Phase 2 UI reference board | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/phase2-ui-reference-board.md`; PNG alpha check reports opaque | Visual direction reference only | `抖抖的抖/Assets/UI/Reference/phase2-ui-reference-board.png` |
+| iOS UI reference board | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/ios-ui-reference-board.md`; PNG alpha check reports opaque | Visual direction reference only; not connected to production UI | `抖抖的抖/Assets/UI/Reference/ios-ui-reference-board.png` |
+| Console liquid final direction reference | OpenAI built-in image generation | Generated reference asset; prompt saved in `docs/prompts/console-liquid-final-direction.md`; PNG alpha check reports opaque | Visual direction reference only; not connected to production UI | `抖抖的抖/Assets/UI/Reference/console-liquid-final-direction.png` |
+| Formal UI glyph icons | Windows system icon fonts: Segoe Fluent Icons with Segoe MDL2 Assets fallback | Microsoft Windows system font; no bundled third-party asset | Navigation, toolbar and empty-state icons replacing rough hand-authored XAML paths | `抖抖的抖/MainWindow.xaml`, `抖抖的抖/Controls/SettingsWindow.xaml`, `抖抖的抖/Controls/EmptyState.xaml` |

@@ -1,7 +1,7 @@
 {
   "pollingRateHz": 1000,
   "inputMode": "Auto",
-  "themeKey": "blue",
+  "themeKey": "pink",
   "themeMode": "light",
   "controllerAppearanceKey": "minimal",
   "mappings": [

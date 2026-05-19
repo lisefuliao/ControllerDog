@@ -1,22 +1,33 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Color x:Key="BackgroundColor">#F6F8FC</Color>
-    <Color x:Key="CardColor">#FFFFFFFF</Color>
-    <Color x:Key="PrimaryColor">#4C8DFF</Color>
-    <Color x:Key="AccentColor">#1F6FEB</Color>
+    <Color x:Key="BackgroundColor">#F5F6F8</Color>
+    <Color x:Key="CardColor">#FBFCFE</Color>
+    <Color x:Key="PrimaryColor">#F3A6B8</Color>
+    <Color x:Key="AccentColor">#D95782</Color>
+    <Color x:Key="AccentHoverColor">#E66F96</Color>
+    <Color x:Key="AccentPressedColor">#B94469</Color>
+    <Color x:Key="AccentSoftColor">#FFF1F5</Color>
     <Color x:Key="TextPrimaryColor">#182234</Color>
     <Color x:Key="TextSecondaryColor">#687386</Color>
-    <Color x:Key="BorderColor">#DDE5F1</Color>
-    <Color x:Key="SoftPinkColor">#EAF2FF</Color>
-    <Color x:Key="PressedColor">#1A5FD2</Color>
+    <Color x:Key="BorderColor">#E4E7EC</Color>
+    <Color x:Key="SoftPinkColor">#FFF5F7</Color>
+    <Color x:Key="PressedColor">#B94469</Color>
     <Color x:Key="DisabledColor">#EEF1F6</Color>
     <Color x:Key="SuccessColor">#28C76F</Color>
     <Color x:Key="WarningColor">#FF9F43</Color>
+    <Color x:Key="ErrorColor">#EA5455</Color>
+    <Color x:Key="ChipBackgroundColor">#F1F3F6</Color>
+    <Color x:Key="ChipPressedBackgroundColor">#D95782</Color>
+    <Color x:Key="InputBackgroundColor">#FBFCFE</Color>
+    <Color x:Key="TextMutedColor">#8B96A8</Color>
 
     <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}" />
     <SolidColorBrush x:Key="CardBrush" Color="{StaticResource CardColor}" />
     <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource PrimaryColor}" />
     <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+    <SolidColorBrush x:Key="AccentPressedBrush" Color="{StaticResource AccentPressedColor}" />
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="{StaticResource AccentSoftColor}" />
     <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}" />
     <SolidColorBrush x:Key="TextSecondaryBrush" Color="{StaticResource TextSecondaryColor}" />
     <SolidColorBrush x:Key="BorderBrushSoft" Color="{StaticResource BorderColor}" />
@@ -25,11 +36,27 @@
     <SolidColorBrush x:Key="DisabledBrush" Color="{StaticResource DisabledColor}" />
     <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
     <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+    <SolidColorBrush x:Key="ErrorBrush" Color="{StaticResource ErrorColor}" />
+    <SolidColorBrush x:Key="ChipBackgroundBrush" Color="{StaticResource ChipBackgroundColor}" />
+    <SolidColorBrush x:Key="ChipPressedBackgroundBrush" Color="{StaticResource ChipPressedBackgroundColor}" />
+    <SolidColorBrush x:Key="InputBackgroundBrush" Color="{StaticResource InputBackgroundColor}" />
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{StaticResource TextMutedColor}" />
+    <SolidColorBrush x:Key="IconBrush" Color="{StaticResource TextPrimaryColor}" />
+    <SolidColorBrush x:Key="IconMutedBrush" Color="{StaticResource TextSecondaryColor}" />
+    <SolidColorBrush x:Key="SuccessSoftBrush" Color="#E8F8EF" />
+    <SolidColorBrush x:Key="WarningSoftBrush" Color="#FFF3E4" />
+    <SolidColorBrush x:Key="ErrorSoftBrush" Color="#FFF0F2" />
 
     <DropShadowEffect x:Key="SoftShadow"
-                      BlurRadius="24"
+                      BlurRadius="16"
                       ShadowDepth="2"
                       Direction="270"
-                      Opacity="0.10"
+                      Opacity="0.045"
+                      Color="#60708A" />
+    <DropShadowEffect x:Key="LiftShadow"
+                      BlurRadius="18"
+                      ShadowDepth="3"
+                      Direction="270"
+                      Opacity="0.08"
                       Color="#60708A" />
 </ResourceDictionary>

@@ -6,9 +6,13 @@ public sealed class PollingRateOption
 
     public string DisplayName { get; init; } = "";
 
+    public string DropDownDisplayName { get; init; } = "";
+
+    public string ShortDisplayName => $"{Hertz} Hz";
+
     public double IntervalMilliseconds => 1000.0 / Hertz;
 
-    public override string ToString() => DisplayName;
+    public override string ToString() => ShortDisplayName;
 
     public static IReadOnlyList<PollingRateOption> Defaults { get; } =
     [
@@ -17,6 +21,10 @@ public sealed class PollingRateOption
         new() { Hertz = 1000, DisplayName = "1000 Hz" },
         new() { Hertz = 2000, DisplayName = "2000 Hz" },
         new() { Hertz = 4000, DisplayName = "4000 Hz" },
-        new() { Hertz = 8000, DisplayName = "8000 Hz（有点军备竞赛了吧）" }
+        new() { Hertz = 8000, DisplayName = "8000 Hz", DropDownDisplayName = "8000 Hz（有点拿命竞赛了吧）" }
     ];
+
+    public string ListDisplayName => string.IsNullOrWhiteSpace(DropDownDisplayName)
+        ? DisplayName
+        : DropDownDisplayName;
 }

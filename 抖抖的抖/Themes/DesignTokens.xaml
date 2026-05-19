@@ -1,0 +1,27 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <sys:Double x:Key="RadiusSm">8</sys:Double>
+    <sys:Double x:Key="RadiusMd">12</sys:Double>
+    <sys:Double x:Key="RadiusLg">18</sys:Double>
+    <sys:Double x:Key="RadiusSmall">8</sys:Double>
+    <sys:Double x:Key="RadiusMedium">12</sys:Double>
+    <sys:Double x:Key="RadiusLarge">18</sys:Double>
+    <sys:Double x:Key="SpacingXS">4</sys:Double>
+    <sys:Double x:Key="SpacingS">8</sys:Double>
+    <sys:Double x:Key="SpacingM">14</sys:Double>
+    <sys:Double x:Key="SpacingL">22</sys:Double>
+    <sys:Double x:Key="ToolbarHeight">58</sys:Double>
+    <sys:Double x:Key="ButtonHeight">40</sys:Double>
+    <sys:Double x:Key="SmallButtonHeight">32</sys:Double>
+    <sys:Double x:Key="InputHeight">38</sys:Double>
+    <sys:Double x:Key="ControlHeight">38</sys:Double>
+    <sys:Double x:Key="ChipHeight">34</sys:Double>
+    <Thickness x:Key="CardPadding">18</Thickness>
+    <sys:Double x:Key="SectionSpacing">16</sys:Double>
+    <sys:Double x:Key="IconSizeSm">16</sys:Double>
+    <sys:Double x:Key="IconSizeMd">20</sys:Double>
+    <sys:Double x:Key="IconSizeLg">28</sys:Double>
+    <Duration x:Key="HoverDuration">0:0:0.14</Duration>
+    <Duration x:Key="PressedDuration">0:0:0.09</Duration>
+</ResourceDictionary>

@@ -24,6 +24,18 @@ public sealed class ControllerState
 
     public HashSet<string> PressedButtons { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
+    public double LeftStickX { get; set; }
+
+    public double LeftStickY { get; set; }
+
+    public double RightStickX { get; set; }
+
+    public double RightStickY { get; set; }
+
+    public double LeftTrigger { get; set; }
+
+    public double RightTrigger { get; set; }
+
     public Dictionary<string, ButtonPhase> ButtonPhases { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public DateTimeOffset Timestamp { get; set; } = DateTimeOffset.Now;
@@ -64,6 +76,12 @@ public sealed class ControllerState
             InputMode = InputMode,
             XInputUserIndex = XInputUserIndex,
             PressedButtons = new HashSet<string>(PressedButtons, StringComparer.OrdinalIgnoreCase),
+            LeftStickX = LeftStickX,
+            LeftStickY = LeftStickY,
+            RightStickX = RightStickX,
+            RightStickY = RightStickY,
+            LeftTrigger = LeftTrigger,
+            RightTrigger = RightTrigger,
             ButtonPhases = new Dictionary<string, ButtonPhase>(ButtonPhases, StringComparer.OrdinalIgnoreCase),
             Timestamp = Timestamp,
             RawSummary = RawSummary
@@ -94,10 +112,21 @@ public sealed class ControllerState
             "Options" => "Start",
             "Guide" => "PS",
             "Xbox" => "PS",
+            "Home" => "PS",
+            "View" => "Back",
+            "Menu" => "Start",
             "Cross" => "A",
             "Circle" => "B",
             "Square" => "X",
             "Triangle" => "Y",
+            "L3" => "LeftStick",
+            "LS" => "LeftStick",
+            "R3" => "RightStick",
+            "RS" => "RightStick",
+            "↑" => "DPadUp",
+            "↓" => "DPadDown",
+            "←" => "DPadLeft",
+            "→" => "DPadRight",
             "×" => "A",
             "○" => "B",
             "□" => "X",

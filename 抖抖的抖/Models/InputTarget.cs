@@ -13,7 +13,7 @@ public enum InputTargetKind
 public sealed class InputTarget : INotifyPropertyChanged
 {
     private InputTargetKind _kind = InputTargetKind.Keyboard;
-    private string _value = "Space";
+    private string _value = "";
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -39,7 +39,7 @@ public sealed class InputTarget : INotifyPropertyChanged
         get => _value;
         set
         {
-            var normalized = string.IsNullOrWhiteSpace(value) ? "Space" : value.Trim();
+            var normalized = string.IsNullOrWhiteSpace(value) ? "" : value.Trim();
             if (_value == normalized)
             {
                 return;
@@ -47,13 +47,19 @@ public sealed class InputTarget : INotifyPropertyChanged
 
             _value = normalized;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(IsMapped));
             OnPropertyChanged(nameof(DisplayName));
             OnPropertyChanged(nameof(Signature));
         }
     }
 
     [JsonIgnore]
-    public string DisplayName => Kind == InputTargetKind.Mouse
+    public bool IsMapped => !string.IsNullOrWhiteSpace(Value);
+
+    [JsonIgnore]
+    public string DisplayName => !IsMapped
+        ? "未映射"
+        : Kind == InputTargetKind.Mouse
         ? Value switch
         {
             "LeftButton" => "鼠标左键",
@@ -66,7 +72,7 @@ public sealed class InputTarget : INotifyPropertyChanged
         : $"{Value} 键";
 
     [JsonIgnore]
-    public string Signature => $"{Kind}:{Value}";
+    public string Signature => IsMapped ? $"{Kind}:{Value}" : "Unmapped";
 
     public InputTarget Clone()
     {

@@ -20,12 +20,19 @@
   <ItemGroup>
     <None Include="config.default.json" CopyToOutputDirectory="PreserveNewest" />
     <Resource Include="Assets\Images\*.png" />
+    <Resource Include="Assets\Branding\*.png" />
     <Resource Include="Assets\Icons\*.png" />
+    <Resource Include="Assets\Icons\*.ico" />
+    <Resource Include="Assets\UI\Icons\*.png" />
     <Resource Include="Assets\UI\*.png" />
+    <Resource Include="Assets\UI\Reference\*.png" />
+    <Resource Include="Assets\UI\Illustrations\*.png" />
+    <Resource Include="Assets\UI\Mockups\*.png" />
     <Resource Include="Assets\References\*.png" />
+    <Resource Include="Assets\Controllers\**\*.png" />
     <Resource Include="Assets\Controllers\**\*.svg" />
     <Resource Include="Assets\Controllers\**\*.xaml" />
     <Resource Include="Assets\Themes\*.xaml" />
+    <Content Include="Assets\Controllers\**\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
-

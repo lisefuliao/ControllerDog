@@ -111,6 +111,7 @@ public sealed class ControllerInputService : IDisposable
         var metricsStopwatch = Stopwatch.StartNew();
         var loopCounter = 0;
         var latencyAverage = 0.0;
+        var smoothedActualHz = 0.0;
         var latencyStopwatch = new Stopwatch();
 
         while (!cancellationToken.IsCancellationRequested)
@@ -145,10 +146,13 @@ public sealed class ControllerInputService : IDisposable
 
                 loopCounter++;
 
-                if (metricsStopwatch.ElapsedMilliseconds >= 250)
+                if (metricsStopwatch.ElapsedMilliseconds >= 1000)
                 {
-                    var actualHz = loopCounter * 1000.0 / Math.Max(1, metricsStopwatch.ElapsedMilliseconds);
-                    PublishMetrics(new InputMetrics(currentRate, actualHz, latencyAverage, Interlocked.Read(ref _exceptionCount)));
+                    var instantHz = loopCounter * 1000.0 / Math.Max(1, metricsStopwatch.ElapsedMilliseconds);
+                    smoothedActualHz = smoothedActualHz <= 0
+                        ? instantHz
+                        : smoothedActualHz * 0.75 + instantHz * 0.25;
+                    PublishMetrics(new InputMetrics(currentRate, smoothedActualHz, latencyAverage, Interlocked.Read(ref _exceptionCount)));
                     loopCounter = 0;
                     metricsStopwatch.Restart();
                 }
@@ -286,8 +290,19 @@ public sealed class ControllerInputService : IDisposable
                || state.ControllerType != _lastPublishedState.ControllerType
                || state.XInputUserIndex != _lastPublishedState.XInputUserIndex
                || !string.Equals(state.DeviceName, _lastPublishedState.DeviceName, StringComparison.OrdinalIgnoreCase)
+               || AxisChanged(state.LeftStickX, _lastPublishedState.LeftStickX)
+               || AxisChanged(state.LeftStickY, _lastPublishedState.LeftStickY)
+               || AxisChanged(state.RightStickX, _lastPublishedState.RightStickX)
+               || AxisChanged(state.RightStickY, _lastPublishedState.RightStickY)
+               || AxisChanged(state.LeftTrigger, _lastPublishedState.LeftTrigger)
+               || AxisChanged(state.RightTrigger, _lastPublishedState.RightTrigger)
                || !state.PressedButtons.SetEquals(_lastPublishedState.PressedButtons)
                || !DictionaryEquals(state.ButtonPhases, _lastPublishedState.ButtonPhases);
+    }
+
+    private static bool AxisChanged(double left, double right)
+    {
+        return Math.Abs(left - right) > 0.02;
     }
 
     private static bool DictionaryEquals(Dictionary<string, ButtonPhase> left, Dictionary<string, ButtonPhase> right)

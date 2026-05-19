@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using DouDouDeDou.Models;
+using DouDouDeDou.Services;
 using ControllerTypeModel = DouDouDeDou.Models.ControllerType;
 
 namespace DouDouDeDou.Controls;
@@ -48,7 +49,7 @@ public partial class ControllerPreviewControl : UserControl
             nameof(AppearanceStyle),
             typeof(string),
             typeof(ControllerPreviewControl),
-            new PropertyMetadata("minimal"));
+            new PropertyMetadata("minimal", OnVisualStateChanged));
 
     public static readonly DependencyProperty IsCalibrationModeProperty =
         DependencyProperty.Register(
@@ -59,13 +60,27 @@ public partial class ControllerPreviewControl : UserControl
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    private readonly ControllerLayoutService _layoutService = new();
     private readonly DispatcherTimer _refreshTimer;
     private readonly List<HotspotInstance> _hotspots = new();
+    private readonly Dictionary<string, AlphaMask> _alphaMasks = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, BitmapSource> _bitmapCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<FrameworkElement, VisualState> _lastVisualStates = new();
     private readonly Dictionary<string, Point> _offsets = new(StringComparer.OrdinalIgnoreCase);
     private INotifyCollectionChanged? _observedPressedCollection;
     private HashSet<string> _pendingPressedButtons = new(StringComparer.OrdinalIgnoreCase);
     private ControllerTypeModel _pendingControllerType = ControllerTypeModel.None;
+    private ControllerTypeModel _renderedControllerType = ControllerTypeModel.None;
+    private bool _renderedCalibrationMode;
+    private string? _renderedControllerAsset;
+    private bool _hasRenderedStructure;
+    private Window? _hostWindow;
     private HotspotInstance? _dragging;
+    private HotspotInstance? _selectedCalibrationHotspot;
+    private HotspotInstance? _hoveredHotspot;
+    private HotspotInstance? _pressedAlphaHotspot;
+    private Point _lastAlphaHitPoint = new(double.NaN, double.NaN);
+    private HotspotInstance? _lastAlphaHit;
     private Point _dragStartMouse;
     private Point _dragStartOffset;
     private bool _refreshRequested = true;
@@ -75,13 +90,20 @@ public partial class ControllerPreviewControl : UserControl
         InitializeComponent();
         LoadCalibrationOffsets();
 
+        PreviewCanvas.MouseMove += OnPreviewCanvasMouseMove;
+        PreviewCanvas.MouseLeave += OnPreviewCanvasMouseLeave;
+        PreviewCanvas.PreviewMouseLeftButtonDown += OnPreviewCanvasMouseDown;
+        PreviewCanvas.PreviewMouseLeftButtonUp += OnPreviewCanvasMouseUp;
+        PreviewCanvas.KeyDown += OnPreviewCanvasKeyDown;
+
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
             Interval = TimeSpan.FromMilliseconds(16)
         };
         _refreshTimer.Tick += (_, _) => FlushPendingRefresh();
         _refreshTimer.Start();
-        Unloaded += (_, _) => _refreshTimer.Stop();
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
         RequestRefresh();
     }
 
@@ -144,6 +166,12 @@ public partial class ControllerPreviewControl : UserControl
 
     private void RequestRefresh()
     {
+        if (IsHostMinimized())
+        {
+            _refreshRequested = true;
+            return;
+        }
+
         _pendingPressedButtons = GetPressedCanonicalButtons();
         _pendingControllerType = ControllerType;
         _refreshRequested = true;
@@ -156,6 +184,54 @@ public partial class ControllerPreviewControl : UserControl
         Dispatcher.BeginInvoke(FlushPendingRefresh, DispatcherPriority.Render);
     }
 
+    private void OnLoaded(object sender, RoutedEventArgs e)
+    {
+        _hostWindow = Window.GetWindow(this);
+        if (_hostWindow is not null)
+        {
+            _hostWindow.StateChanged += OnHostWindowStateChanged;
+        }
+
+        UpdateRefreshTimerForWindowState();
+    }
+
+    private void OnUnloaded(object sender, RoutedEventArgs e)
+    {
+        if (_hostWindow is not null)
+        {
+            _hostWindow.StateChanged -= OnHostWindowStateChanged;
+            _hostWindow = null;
+        }
+
+        _refreshTimer.Stop();
+    }
+
+    private void OnHostWindowStateChanged(object? sender, EventArgs e)
+    {
+        UpdateRefreshTimerForWindowState();
+    }
+
+    private void UpdateRefreshTimerForWindowState()
+    {
+        if (IsHostMinimized())
+        {
+            _refreshTimer.Stop();
+            return;
+        }
+
+        if (!_refreshTimer.IsEnabled)
+        {
+            _refreshTimer.Start();
+        }
+
+        RequestRefresh();
+    }
+
+    private bool IsHostMinimized()
+    {
+        return _hostWindow?.WindowState == WindowState.Minimized;
+    }
+
     private void FlushPendingRefresh()
     {
         if (!_refreshRequested)
@@ -164,15 +240,29 @@ public partial class ControllerPreviewControl : UserControl
         }
 
         _refreshRequested = false;
-        UpdateControllerImage();
-        RebuildHotspots();
+        var controllerAsset = GetControllerAsset();
+        var structureChanged = !_hasRenderedStructure
+                               || _renderedControllerType != _pendingControllerType
+                               || _renderedCalibrationMode != IsCalibrationMode
+                               || !string.Equals(_renderedControllerAsset, controllerAsset, StringComparison.OrdinalIgnoreCase);
+
+        if (structureChanged)
+        {
+            UpdateControllerImage(controllerAsset);
+            RebuildHotspots();
+            _renderedControllerType = _pendingControllerType;
+            _renderedCalibrationMode = IsCalibrationMode;
+            _renderedControllerAsset = controllerAsset;
+            _hasRenderedStructure = true;
+        }
+
+        CalibrationTools.Visibility = Visibility.Collapsed;
         UpdateHighlights();
     }
 
-    private void UpdateControllerImage()
+    private void UpdateControllerImage(string asset)
     {
-        var asset = GetControllerAsset();
-        ControllerImage.Source = new BitmapImage(new Uri(asset, UriKind.Relative));
+        ControllerImage.Source = LoadFrozenBitmap(asset);
         ControllerImage.Opacity = _pendingControllerType == ControllerTypeModel.None ? 0.35 : 1.0;
     }
 
@@ -181,23 +271,35 @@ public partial class ControllerPreviewControl : UserControl
         var suffix = IsDarkPalette() ? "dark" : "light";
         return _pendingControllerType switch
         {
-            ControllerTypeModel.DualShock4 => $"/Assets/Images/ds4_{suffix}.png",
-            ControllerTypeModel.DualSenseDse => $"/Assets/Images/dualsense_{suffix}.png",
-            ControllerTypeModel.XInput => $"/Assets/Images/xinput_{suffix}.png",
-            _ => $"/Assets/Images/xinput_{suffix}.png"
+            ControllerTypeModel.DualShock4 => $"/Assets/Controllers/DS4/base_{suffix}.png",
+            ControllerTypeModel.DualSenseDse => $"/Assets/Controllers/DSE/Base_{ToTitle(suffix)}.png",
+            ControllerTypeModel.XInput => $"/Assets/Controllers/Xbox/Base_{ToTitle(suffix)}.png",
+            _ => $"/Assets/Controllers/Xbox/Base_{ToTitle(suffix)}.png"
         };
     }
+
+    private static string ToTitle(string value) => string.Equals(value, "dark", StringComparison.OrdinalIgnoreCase) ? "Dark" : "Light";
 
     private void RebuildHotspots()
     {
         PreviewCanvas.Children.Clear();
         PreviewCanvas.Children.Add(ControllerImage);
         _hotspots.Clear();
+        _lastVisualStates.Clear();
+        _hoveredHotspot = null;
+        _pressedAlphaHotspot = null;
+
+        if (IsAlphaOverlayMode())
+        {
+            RebuildAlphaHotspots();
+            return;
+        }
 
         foreach (var definition in GetDefinitions(_pendingControllerType))
         {
             var element = CreateHotspotElement(definition);
-            var instance = new HotspotInstance(definition, element);
+            var overlay = CreateButtonOverlay(definition);
+            var instance = new HotspotInstance(definition, element, overlay);
             _hotspots.Add(instance);
 
             element.Tag = instance;
@@ -215,6 +317,13 @@ public partial class ControllerPreviewControl : UserControl
             element.MouseRightButtonUp += OnHotspotRightClick;
 
             ApplyPosition(instance);
+            if (overlay is not null)
+            {
+                Panel.SetZIndex(overlay, definition.ZIndex);
+                PreviewCanvas.Children.Add(overlay);
+            }
+
+            Panel.SetZIndex(element, definition.ZIndex + 1);
             PreviewCanvas.Children.Add(element);
 
             if (IsCalibrationMode)
@@ -222,6 +331,44 @@ public partial class ControllerPreviewControl : UserControl
                 AddCalibrationLabel(instance);
             }
         }
+    }
+
+    private void RebuildAlphaHotspots()
+    {
+        IEnumerable<HotspotDefinition> definitions = _pendingControllerType == ControllerTypeModel.DualShock4
+            ? Ds4HitTestPriority
+            : GetDefinitions(_pendingControllerType).OrderByDescending(x => x.ZIndex);
+
+        foreach (var definition in definitions)
+        {
+            var overlay = CreateButtonOverlay(definition);
+            if (overlay is null)
+            {
+                continue;
+            }
+
+            _ = GetAlphaMask(definition);
+            var element = new Border { IsHitTestVisible = false };
+            var instance = new HotspotInstance(definition, element, overlay);
+            element.Tag = instance;
+            _hotspots.Add(instance);
+            PreviewCanvas.Children.Add(overlay);
+        }
+
+        PreviewCanvas.Cursor = Cursors.Hand;
+        _lastAlphaHitPoint = new Point(double.NaN, double.NaN);
+        _lastAlphaHit = null;
+    }
+
+    private bool IsAlphaOverlayMode()
+    {
+        return !IsCalibrationMode && HasAlphaOverlays(_pendingControllerType);
+    }
+
+    private bool HasAlphaOverlays(ControllerTypeModel controllerType)
+    {
+        return controllerType == ControllerTypeModel.DualShock4
+               || GetDefinitions(controllerType).Any(definition => GetButtonOverlayAsset(definition) is not null);
     }
 
     private static FrameworkElement CreateHotspotElement(HotspotDefinition definition)
@@ -249,6 +396,130 @@ public partial class ControllerPreviewControl : UserControl
             Height = ScaleY(definition.Height),
             SnapsToDevicePixels = true
         };
+    }
+
+    private Image? CreateButtonOverlay(HotspotDefinition definition)
+    {
+        var asset = GetButtonOverlayAsset(definition);
+        if (asset is null)
+        {
+            return null;
+        }
+
+        var image = new Image
+        {
+            Source = LoadFrozenBitmap(asset),
+            Width = CanvasWidth,
+            Height = CanvasHeight,
+            Stretch = Stretch.Fill,
+            IsHitTestVisible = false,
+            Opacity = 0
+        };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+        return image;
+    }
+
+    private BitmapSource LoadFrozenBitmap(string asset)
+    {
+        if (_bitmapCache.TryGetValue(asset, out var cached))
+        {
+            return cached;
+        }
+
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.UriSource = CreateAssetUri(asset);
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.CreateOptions = BitmapCreateOptions.PreservePixelFormat;
+        bitmap.EndInit();
+        bitmap.Freeze();
+        _bitmapCache[asset] = bitmap;
+        return bitmap;
+    }
+
+    private static Uri CreateAssetUri(string asset)
+    {
+        if (System.IO.Path.IsPathRooted(asset) && File.Exists(asset))
+        {
+            return new Uri(asset, UriKind.Absolute);
+        }
+
+        var normalized = asset.StartsWith("/", StringComparison.Ordinal)
+            ? asset
+            : "/" + asset;
+        return new Uri($"pack://application:,,,{normalized}", UriKind.Absolute);
+    }
+
+    private string? GetButtonOverlayAsset(HotspotDefinition definition)
+    {
+        if (_pendingControllerType != ControllerTypeModel.DualShock4)
+        {
+            return string.IsNullOrWhiteSpace(definition.HighlightImage) ? null : definition.HighlightImage;
+        }
+
+        return $"/Assets/Controllers/DS4/buttons/{definition.Name}.png";
+    }
+
+    private AlphaMask? GetAlphaMask(HotspotDefinition definition)
+    {
+        var asset = GetButtonOverlayAsset(definition);
+        if (asset is null)
+        {
+            return null;
+        }
+
+        if (_alphaMasks.TryGetValue(asset, out var cached))
+        {
+            return cached;
+        }
+
+        try
+        {
+            var source = LoadFrozenBitmap(asset);
+            BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+                ? source
+                : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+            var stride = bitmap.PixelWidth * 4;
+            var pixels = new byte[stride * bitmap.PixelHeight];
+            bitmap.CopyPixels(pixels, stride, 0);
+            var alpha = new byte[bitmap.PixelWidth * bitmap.PixelHeight];
+            var minX = bitmap.PixelWidth;
+            var minY = bitmap.PixelHeight;
+            var maxX = 0;
+            var maxY = 0;
+            for (var y = 0; y < bitmap.PixelHeight; y++)
+            {
+                var row = y * stride;
+                var alphaRow = y * bitmap.PixelWidth;
+                for (var x = 0; x < bitmap.PixelWidth; x++)
+                {
+                    var value = pixels[row + x * 4 + 3];
+                    alpha[alphaRow + x] = value;
+                    if (value <= 24)
+                    {
+                        continue;
+                    }
+
+                    minX = Math.Min(minX, x);
+                    minY = Math.Min(minY, y);
+                    maxX = Math.Max(maxX, x);
+                    maxY = Math.Max(maxY, y);
+                }
+            }
+
+            if (minX > maxX || minY > maxY)
+            {
+                minX = minY = maxX = maxY = 0;
+            }
+
+            cached = new AlphaMask(bitmap.PixelWidth, bitmap.PixelHeight, alpha, minX, minY, maxX, maxY);
+            _alphaMasks[asset] = cached;
+            return cached;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void ApplyPosition(HotspotInstance instance)
@@ -279,18 +550,143 @@ public partial class ControllerPreviewControl : UserControl
     {
         if (sender is FrameworkElement element && element.Tag is HotspotInstance instance && !IsHotspotActive(instance.Definition.SourceButton))
         {
+            _hoveredHotspot = instance;
             ApplyElementVisual(element, VisualState.Hover);
-            AnimateHotspot(element, 1.025, 120, new CubicEase { EasingMode = EasingMode.EaseOut });
         }
+    }
+
+    private void OnPreviewCanvasMouseMove(object sender, MouseEventArgs e)
+    {
+        if (!IsAlphaOverlayMode())
+        {
+            return;
+        }
+
+        var hit = HitTestAlphaOverlay(e.GetPosition(PreviewCanvas));
+        if (ReferenceEquals(hit, _hoveredHotspot))
+        {
+            return;
+        }
+
+        _hoveredHotspot = hit;
+        UpdateHighlights();
+    }
+
+    private void OnPreviewCanvasMouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!IsAlphaOverlayMode())
+        {
+            return;
+        }
+
+        _hoveredHotspot = null;
+        _pressedAlphaHotspot = null;
+        UpdateHighlights();
+    }
+
+    private void OnPreviewCanvasMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsAlphaOverlayMode())
+        {
+            return;
+        }
+
+        _pressedAlphaHotspot = HitTestAlphaOverlay(e.GetPosition(PreviewCanvas));
+        if (_pressedAlphaHotspot is not null)
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnPreviewCanvasMouseUp(object sender, MouseButtonEventArgs e)
+    {
+        if (!IsAlphaOverlayMode())
+        {
+            return;
+        }
+
+        var hit = HitTestAlphaOverlay(e.GetPosition(PreviewCanvas));
+        if (hit is not null && ReferenceEquals(hit, _pressedAlphaHotspot) && ButtonCommand?.CanExecute(hit.Definition.SourceButton) == true)
+        {
+            ButtonCommand.Execute(hit.Definition.SourceButton);
+            e.Handled = true;
+        }
+
+        _pressedAlphaHotspot = null;
+    }
+
+    private HotspotInstance? HitTestAlphaOverlay(Point canvasPoint)
+    {
+        if (canvasPoint.X < 0 || canvasPoint.Y < 0 || canvasPoint.X >= CanvasWidth || canvasPoint.Y >= CanvasHeight)
+        {
+            return null;
+        }
+
+        if (Math.Abs(canvasPoint.X - _lastAlphaHitPoint.X) < 0.25
+            && Math.Abs(canvasPoint.Y - _lastAlphaHitPoint.Y) < 0.25)
+        {
+            return _lastAlphaHit;
+        }
+
+        _lastAlphaHitPoint = canvasPoint;
+        _lastAlphaHit = null;
+        foreach (var hotspot in _hotspots)
+        {
+            var mask = GetAlphaMask(hotspot.Definition);
+            if (mask is null)
+            {
+                continue;
+            }
+
+            var sourceX = canvasPoint.X / CanvasWidth * mask.Width;
+            var sourceY = canvasPoint.Y / CanvasHeight * mask.Height;
+            if (sourceX < mask.MinX || sourceX > mask.MaxX || sourceY < mask.MinY || sourceY > mask.MaxY)
+            {
+                continue;
+            }
+
+            if (IsDirectionalDPad(hotspot.Definition) && !IsInsideDefinitionBounds(hotspot.Definition, sourceX, sourceY))
+            {
+                continue;
+            }
+
+            var x = (int)Math.Round(canvasPoint.X / CanvasWidth * (mask.Width - 1));
+            var y = (int)Math.Round(canvasPoint.Y / CanvasHeight * (mask.Height - 1));
+            if (mask.GetAlpha(x, y) > 24)
+            {
+                _lastAlphaHit = hotspot;
+                return hotspot;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsDirectionalDPad(HotspotDefinition definition)
+    {
+        return definition.Name.StartsWith("DPad", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsInsideDefinitionBounds(HotspotDefinition definition, double sourceX, double sourceY)
+    {
+        const double margin = 8;
+        return sourceX >= definition.X - margin
+               && sourceX <= definition.X + definition.Width + margin
+               && sourceY >= definition.Y - margin
+               && sourceY <= definition.Y + definition.Height + margin;
     }
 
     private void OnHotspotMouseLeave(object sender, MouseEventArgs e)
     {
         if (sender is FrameworkElement element && element.Tag is HotspotInstance instance)
         {
+            if (ReferenceEquals(_hoveredHotspot, instance))
+            {
+                _hoveredHotspot = null;
+            }
+
             var active = IsHotspotActive(instance.Definition.SourceButton);
             ApplyElementVisual(element, active ? VisualState.Active : VisualState.Default);
-            AnimateHotspot(element, 1.0, 120, new CubicEase { EasingMode = EasingMode.EaseOut });
         }
     }
 
@@ -303,6 +699,8 @@ public partial class ControllerPreviewControl : UserControl
 
         if (IsCalibrationMode)
         {
+            _selectedCalibrationHotspot = instance;
+            PreviewCanvas.Focus();
             _dragging = instance;
             _dragStartMouse = e.GetPosition(PreviewCanvas);
             _dragStartOffset = GetOffset(instance.Definition);
@@ -311,7 +709,7 @@ public partial class ControllerPreviewControl : UserControl
             return;
         }
 
-        AnimateHotspot(element, 0.965, 90, new QuadraticEase { EasingMode = EasingMode.EaseOut });
+        ApplyElementVisual(element, VisualState.Active);
     }
 
     private void OnHotspotMouseMove(object sender, MouseEventArgs e)
@@ -339,8 +737,9 @@ public partial class ControllerPreviewControl : UserControl
         if (IsCalibrationMode)
         {
             element.ReleaseMouseCapture();
+            UpdateLayoutFromElement(instance);
             _dragging = null;
-            SaveCalibrationOffsets();
+            SaveLayoutIfJsonBacked(instance.Definition);
             RequestRefresh();
             e.Handled = true;
             return;
@@ -361,7 +760,66 @@ public partial class ControllerPreviewControl : UserControl
         }
 
         _offsets.Remove(GetOffsetKey(instance.Definition));
-        SaveCalibrationOffsets();
+        ResetJsonBackedButton(instance.Definition);
+        RequestRefresh();
+        e.Handled = true;
+    }
+
+    private void OnPreviewCanvasKeyDown(object sender, KeyEventArgs e)
+    {
+        if (!IsCalibrationMode || _selectedCalibrationHotspot is null)
+        {
+            return;
+        }
+
+        var step = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) ? 10 : 1;
+        var resize = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        var definition = _selectedCalibrationHotspot.Definition;
+        var handled = true;
+
+        if (resize)
+        {
+            switch (e.Key)
+            {
+                case Key.Left:
+                    definition.Width = Math.Max(10, definition.Width - step / ScaleX(1));
+                    break;
+                case Key.Right:
+                    definition.Width += step / ScaleX(1);
+                    break;
+                case Key.Up:
+                    definition.Height = Math.Max(10, definition.Height - step / ScaleY(1));
+                    break;
+                case Key.Down:
+                    definition.Height += step / ScaleY(1);
+                    break;
+                default:
+                    handled = false;
+                    break;
+            }
+        }
+        else
+        {
+            var key = GetOffsetKey(definition);
+            var offset = GetOffset(definition);
+            _offsets[key] = e.Key switch
+            {
+                Key.Left => new Point(offset.X - step, offset.Y),
+                Key.Right => new Point(offset.X + step, offset.Y),
+                Key.Up => new Point(offset.X, offset.Y - step),
+                Key.Down => new Point(offset.X, offset.Y + step),
+                _ => offset
+            };
+            handled = e.Key is Key.Left or Key.Right or Key.Up or Key.Down;
+        }
+
+        if (!handled)
+        {
+            return;
+        }
+
+        UpdateLayoutFromElement(_selectedCalibrationHotspot);
+        SaveLayoutIfJsonBacked(definition);
         RequestRefresh();
         e.Handled = true;
     }
@@ -372,7 +830,14 @@ public partial class ControllerPreviewControl : UserControl
         foreach (var hotspot in _hotspots)
         {
             var active = IsHotspotActive(hotspot.Definition.SourceButton);
-            ApplyElementVisual(hotspot.Element, disconnected ? VisualState.Disabled : active ? VisualState.Active : VisualState.Default);
+            var state = disconnected
+                ? VisualState.Disabled
+                : active
+                    ? VisualState.Active
+                    : ReferenceEquals(_hoveredHotspot, hotspot)
+                        ? VisualState.Hover
+                        : VisualState.Default;
+            ApplyElementVisual(hotspot.Element, state);
         }
     }
 
@@ -403,17 +868,35 @@ public partial class ControllerPreviewControl : UserControl
 
     private void ApplyElementVisual(FrameworkElement element, VisualState state)
     {
+        if (_lastVisualStates.TryGetValue(element, out var previous) && previous == state)
+        {
+            return;
+        }
+
+        _lastVisualStates[element] = state;
+
         var accent = GetAccentBrush();
+        var hasBitmapOverlay = element.Tag is HotspotInstance instance && instance.Overlay is not null;
+        if (element.Tag is HotspotInstance overlayInstance && overlayInstance.Overlay is not null)
+        {
+            overlayInstance.Overlay.Opacity = state switch
+            {
+                VisualState.Active => 1.0,
+                VisualState.Hover => 0.78,
+                _ => 0
+            };
+        }
+
         var fill = state switch
         {
-            VisualState.Active => GetActiveOverlayBrush(),
-            VisualState.Hover => GetHoverBrush(),
+            VisualState.Active => hasBitmapOverlay ? Brushes.Transparent : GetActiveOverlayBrush(),
+            VisualState.Hover => hasBitmapOverlay ? Brushes.Transparent : GetHoverBrush(),
             VisualState.Disabled => IsCalibrationMode ? GetDisabledBrush() : Brushes.Transparent,
             _ => Brushes.Transparent
         };
         var stroke = state switch
         {
-            VisualState.Active or VisualState.Hover => accent,
+            VisualState.Active or VisualState.Hover => hasBitmapOverlay && !IsCalibrationMode ? Brushes.Transparent : accent,
             VisualState.Disabled => IsCalibrationMode ? GetDisabledBrush() : Brushes.Transparent,
             _ => IsCalibrationMode ? accent : Brushes.Transparent
         };
@@ -505,15 +988,312 @@ public partial class ControllerPreviewControl : UserControl
         return System.IO.Path.Combine(root, "DouDouDeDou", "controller-hotspots.json");
     }
 
-    private static IReadOnlyList<HotspotDefinition> GetDefinitions(ControllerTypeModel controllerType)
+    private IReadOnlyList<HotspotDefinition> GetDefinitions(ControllerTypeModel controllerType)
     {
         return controllerType switch
         {
             ControllerTypeModel.DualShock4 => Ds4Definitions,
-            ControllerTypeModel.DualSenseDse => DualSenseDefinitions,
-            ControllerTypeModel.XInput => XInputDefinitions,
-            _ => XInputDefinitions
+            ControllerTypeModel.DualSenseDse or ControllerTypeModel.XInput => LoadJsonDefinitions(controllerType),
+            _ => LoadJsonDefinitions(ControllerTypeModel.XInput)
         };
+    }
+
+    private IReadOnlyList<HotspotDefinition> LoadJsonDefinitions(ControllerTypeModel controllerType)
+    {
+        var layout = _layoutService.LoadLayout(controllerType);
+        if (layout.ButtonItems.Count == 0)
+        {
+            return controllerType == ControllerTypeModel.DualSenseDse ? DualSenseDefinitions : XInputDefinitions;
+        }
+
+        return layout.ButtonItems
+            .OrderBy(item => item.ZIndex)
+            .Select(item => new HotspotDefinition(
+                item.ButtonId,
+                item.ButtonId,
+                string.IsNullOrWhiteSpace(item.Label) ? item.ButtonId : item.Label,
+                item.IsRectangle ? HotspotShape.Rectangle : HotspotShape.Circle,
+                item.X,
+                item.Y,
+                item.Width,
+                item.Height,
+                item.IsRectangle ? Math.Min(item.Width, item.Height) * 0.22 : Math.Min(item.Width, item.Height) / 2)
+            {
+                HighlightImage = item.HighlightImage,
+                Rotation = item.Rotation,
+                IsTemporary = item.IsTemporary,
+                ZIndex = item.ZIndex
+            })
+            .ToList();
+    }
+
+    private void UpdateLayoutFromElement(HotspotInstance instance)
+    {
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
+        {
+            return;
+        }
+
+        var definition = instance.Definition;
+        var offset = GetOffset(definition);
+        definition.X += offset.X / CanvasWidth * SourceWidth;
+        definition.Y += offset.Y / CanvasHeight * SourceHeight;
+        _offsets.Remove(GetOffsetKey(definition));
+        ApplyPosition(instance);
+    }
+
+    private void SaveLayoutIfJsonBacked(HotspotDefinition definition)
+    {
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
+        {
+            SaveCalibrationOffsets();
+            return;
+        }
+
+        var layout = _layoutService.LoadLayout(_pendingControllerType);
+        var item = layout.ButtonItems.FirstOrDefault(x => string.Equals(x.ButtonId, definition.Name, StringComparison.OrdinalIgnoreCase));
+        if (item is null)
+        {
+            return;
+        }
+
+        item.X = definition.X;
+        item.Y = definition.Y;
+        item.Width = definition.Width;
+        item.Height = definition.Height;
+        item.Rotation = definition.Rotation;
+        _layoutService.SaveLayout(_pendingControllerType, layout);
+    }
+
+    private void ResetJsonBackedButton(HotspotDefinition definition)
+    {
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
+        {
+            SaveCalibrationOffsets();
+            return;
+        }
+
+        var current = _layoutService.LoadLayout(_pendingControllerType);
+        _layoutService.ResetUserLayout(_pendingControllerType);
+        var defaults = _layoutService.LoadLayout(_pendingControllerType);
+        var source = defaults.ButtonItems.FirstOrDefault(x => string.Equals(x.ButtonId, definition.Name, StringComparison.OrdinalIgnoreCase));
+        var target = current.ButtonItems.FirstOrDefault(x => string.Equals(x.ButtonId, definition.Name, StringComparison.OrdinalIgnoreCase));
+        if (source is null || target is null)
+        {
+            return;
+        }
+
+        target.X = source.X;
+        target.Y = source.Y;
+        target.Width = source.Width;
+        target.Height = source.Height;
+        target.Rotation = source.Rotation;
+        _layoutService.SaveLayout(_pendingControllerType, current);
+    }
+
+    private void OnSaveCurrentOverlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCalibrationHotspot is null)
+        {
+            return;
+        }
+
+        SaveLayoutIfJsonBacked(_selectedCalibrationHotspot.Definition);
+    }
+
+    private void OnExportCurrentOverlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCalibrationHotspot is null)
+        {
+            return;
+        }
+
+        ExportOverlay(_selectedCalibrationHotspot.Definition);
+        RequestRefresh();
+    }
+
+    private void OnExportAllOverlaysClick(object sender, RoutedEventArgs e)
+    {
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
+        {
+            return;
+        }
+
+        foreach (var hotspot in _hotspots)
+        {
+            ExportOverlay(hotspot.Definition);
+        }
+
+        RequestRefresh();
+    }
+
+    private void OnResetCurrentOverlayClick(object sender, RoutedEventArgs e)
+    {
+        if (_selectedCalibrationHotspot is null)
+        {
+            return;
+        }
+
+        ResetJsonBackedButton(_selectedCalibrationHotspot.Definition);
+        RequestRefresh();
+    }
+
+    private void ExportOverlay(HotspotDefinition definition)
+    {
+        if (_pendingControllerType == ControllerTypeModel.DualShock4)
+        {
+            return;
+        }
+
+        var baseAsset = GetControllerAsset();
+        var source = LoadFrozenBitmap(baseAsset);
+        BitmapSource bitmap = source.Format == PixelFormats.Bgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        var stride = bitmap.PixelWidth * 4;
+        var pixels = new byte[stride * bitmap.PixelHeight];
+        var output = new byte[pixels.Length];
+        bitmap.CopyPixels(pixels, stride, 0);
+
+        var x0 = Math.Clamp((int)Math.Floor(definition.X), 0, bitmap.PixelWidth - 1);
+        var y0 = Math.Clamp((int)Math.Floor(definition.Y), 0, bitmap.PixelHeight - 1);
+        var x1 = Math.Clamp((int)Math.Ceiling(definition.X + definition.Width), 0, bitmap.PixelWidth);
+        var y1 = Math.Clamp((int)Math.Ceiling(definition.Y + definition.Height), 0, bitmap.PixelHeight);
+        var accent = (Application.Current.Resources["AccentBrush"] as SolidColorBrush)?.Color ?? Color.FromRgb(217, 87, 130);
+
+        for (var y = y0; y < y1; y++)
+        {
+            for (var x = x0; x < x1; x++)
+            {
+                var mask = GetMaskAlpha(definition, x + 0.5, y + 0.5);
+                if (mask <= 0)
+                {
+                    continue;
+                }
+
+                var index = y * stride + x * 4;
+                var sourceAlpha = pixels[index + 3];
+                if (sourceAlpha <= 0)
+                {
+                    continue;
+                }
+
+                output[index] = (byte)Math.Clamp(pixels[index] * 0.58 + accent.B * 0.42, 0, 255);
+                output[index + 1] = (byte)Math.Clamp(pixels[index + 1] * 0.58 + accent.G * 0.42, 0, 255);
+                output[index + 2] = (byte)Math.Clamp(pixels[index + 2] * 0.58 + accent.R * 0.42, 0, 255);
+                output[index + 3] = (byte)Math.Clamp(sourceAlpha * mask * 0.78, 0, 255);
+            }
+        }
+
+        var overlay = BitmapSource.Create(bitmap.PixelWidth, bitmap.PixelHeight, bitmap.DpiX, bitmap.DpiY, PixelFormats.Bgra32, null, output, stride);
+        var path = GetOverlayOutputPath(_pendingControllerType, definition);
+        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path)!);
+        using (var stream = File.Create(path))
+        {
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(overlay));
+            encoder.Save(stream);
+        }
+
+        if (!PngHasClearAlpha(path))
+        {
+            return;
+        }
+
+        var layout = _layoutService.LoadLayout(_pendingControllerType);
+        var item = layout.ButtonItems.FirstOrDefault(x => string.Equals(x.ButtonId, definition.Name, StringComparison.OrdinalIgnoreCase));
+        if (item is null)
+        {
+            return;
+        }
+
+        item.HighlightImage = path;
+        item.X = definition.X;
+        item.Y = definition.Y;
+        item.Width = definition.Width;
+        item.Height = definition.Height;
+        item.Rotation = definition.Rotation;
+        item.IsTemporary = false;
+        _layoutService.SaveLayout(_pendingControllerType, layout);
+        definition.HighlightImage = path;
+        definition.IsTemporary = false;
+    }
+
+    private static double GetMaskAlpha(HotspotDefinition definition, double x, double y)
+    {
+        var localX = (x - definition.X) / Math.Max(1, definition.Width);
+        var localY = (y - definition.Y) / Math.Max(1, definition.Height);
+        if (definition.Shape == HotspotShape.Circle)
+        {
+            var dx = (localX - 0.5) * 2;
+            var dy = (localY - 0.5) * 2;
+            var distance = Math.Sqrt(dx * dx + dy * dy);
+            return distance <= 0.96 ? 1 : distance >= 1 ? 0 : (1 - distance) / 0.04;
+        }
+
+        return localX is >= 0 and <= 1 && localY is >= 0 and <= 1 ? 1 : 0;
+    }
+
+    private static string GetOverlayOutputPath(ControllerTypeModel controllerType, HotspotDefinition definition)
+    {
+        var projectDir = FindProjectDirectory();
+        var controllerFolder = controllerType == ControllerTypeModel.DualSenseDse ? "DSE" : "Xbox";
+        var fileName = definition.Name switch
+        {
+            "A" when controllerType == ControllerTypeModel.DualSenseDse => "Cross",
+            "B" when controllerType == ControllerTypeModel.DualSenseDse => "Circle",
+            "X" when controllerType == ControllerTypeModel.DualSenseDse => "Square",
+            "Y" when controllerType == ControllerTypeModel.DualSenseDse => "Triangle",
+            _ => definition.Name
+        };
+        return System.IO.Path.Combine(projectDir, "Assets", "Controllers", controllerFolder, "Buttons", $"{fileName}.png");
+    }
+
+    private static string FindProjectDirectory()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null)
+        {
+            if (File.Exists(System.IO.Path.Combine(directory.FullName, "抖抖的抖.csproj")))
+            {
+                return directory.FullName;
+            }
+
+            directory = directory.Parent;
+        }
+
+        return AppContext.BaseDirectory;
+    }
+
+    private static bool PngHasClearAlpha(string path)
+    {
+        try
+        {
+            var bitmap = new BitmapImage();
+            bitmap.BeginInit();
+            bitmap.UriSource = new Uri(path, UriKind.Absolute);
+            bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            bitmap.EndInit();
+            BitmapSource source = bitmap.Format == PixelFormats.Bgra32
+                ? bitmap
+                : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+            var stride = source.PixelWidth * 4;
+            var pixels = new byte[stride * source.PixelHeight];
+            source.CopyPixels(pixels, stride, 0);
+            var minAlpha = 255;
+            var maxAlpha = 0;
+            for (var i = 3; i < pixels.Length; i += 4)
+            {
+                minAlpha = Math.Min(minAlpha, pixels[i]);
+                maxAlpha = Math.Max(maxAlpha, pixels[i]);
+            }
+
+            return minAlpha < 10 && maxAlpha > 10;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static double ScaleX(double value) => value / SourceWidth * CanvasWidth;
@@ -586,6 +1366,28 @@ public partial class ControllerPreviewControl : UserControl
         Rect("R1", "R1", "R1", 1112, 96, 154, 40, 18)
     ];
 
+    private static readonly IReadOnlyList<HotspotDefinition> Ds4HitTestPriority =
+    [
+        Circle("Triangle", "Triangle", "Triangle", 1162, 208, 86),
+        Circle("Square", "Square", "Square", 1074, 306, 86),
+        Circle("Circle", "Circle", "Circle", 1260, 306, 86),
+        Circle("Cross", "Cross", "Cross", 1172, 405, 86),
+        Rect("Share", "Share", "Share", 507, 168, 41, 78, 20),
+        Rect("Options", "Options", "Options", 1038, 168, 41, 78, 20),
+        Circle("PS", "PS", "PS", 755, 494, 74),
+        Rect("DPadUp", "DPadUp", "DPadUp", 341, 236, 76, 90, 22),
+        Rect("DPadLeft", "DPadLeft", "DPadLeft", 274, 306, 92, 78, 22),
+        Rect("DPadRight", "DPadRight", "DPadRight", 413, 306, 92, 78, 22),
+        Rect("DPadDown", "DPadDown", "DPadDown", 341, 381, 76, 90, 22),
+        Rect("L2", "L2", "L2", 329, 52, 136, 45, 20),
+        Rect("L1", "L1", "L1", 319, 96, 154, 40, 18),
+        Rect("R2", "R2", "R2", 1121, 52, 136, 45, 20),
+        Rect("R1", "R1", "R1", 1112, 96, 154, 40, 18),
+        Circle("LeftStick", "LeftStick", "LeftStick", 499, 449, 158),
+        Circle("RightStick", "RightStick", "RightStick", 916, 449, 158),
+        Rect("Touchpad", "Touchpad", "Touchpad", 579, 153, 426, 226, 24)
+    ];
+
     private static readonly IReadOnlyList<HotspotDefinition> DualSenseDefinitions =
     [
         Circle("Triangle", "Triangle", "Triangle", 1160, 244, 82),
@@ -640,20 +1442,52 @@ public partial class ControllerPreviewControl : UserControl
         return new HotspotDefinition(name, sourceButton, displayName, HotspotShape.Rectangle, x, y, width, height, cornerRadius);
     }
 
-    private sealed record HotspotDefinition(
-        string Name,
-        string SourceButton,
-        string DisplayName,
-        HotspotShape Shape,
-        double X,
-        double Y,
-        double Width,
-        double Height,
-        double CornerRadius);
+    private sealed class HotspotDefinition
+    {
+        public HotspotDefinition(string name, string sourceButton, string displayName, HotspotShape shape, double x, double y, double width, double height, double cornerRadius)
+        {
+            Name = name;
+            SourceButton = sourceButton;
+            DisplayName = displayName;
+            Shape = shape;
+            X = x;
+            Y = y;
+            Width = width;
+            Height = height;
+            CornerRadius = cornerRadius;
+        }
 
-    private sealed record HotspotInstance(HotspotDefinition Definition, FrameworkElement Element);
+        public string Name { get; }
+        public string SourceButton { get; }
+        public string DisplayName { get; }
+        public HotspotShape Shape { get; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public double CornerRadius { get; }
+        public string? HighlightImage { get; set; }
+        public double Rotation { get; set; }
+        public bool IsTemporary { get; set; }
+        public int ZIndex { get; set; } = 10;
+    }
+
+    private sealed record HotspotInstance(HotspotDefinition Definition, FrameworkElement Element, Image? Overlay);
 
     private sealed record SavedOffset(double X, double Y);
+
+    private sealed record AlphaMask(int Width, int Height, byte[] Alpha, int MinX, int MinY, int MaxX, int MaxY)
+    {
+        public byte GetAlpha(int x, int y)
+        {
+            if (x < 0 || y < 0 || x >= Width || y >= Height)
+            {
+                return 0;
+            }
+
+            return Alpha[y * Width + x];
+        }
+    }
 
     private enum HotspotShape
     {

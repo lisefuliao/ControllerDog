@@ -83,6 +83,12 @@ public sealed class XInputControllerService
             InputMode = "XInput",
             XInputUserIndex = (int)userIndex,
             PressedButtons = pressed,
+            LeftStickX = NormalizeThumb(gamepad.LeftThumbX),
+            LeftStickY = NormalizeThumb(gamepad.LeftThumbY),
+            RightStickX = NormalizeThumb(gamepad.RightThumbX),
+            RightStickY = NormalizeThumb(gamepad.RightThumbY),
+            LeftTrigger = gamepad.LeftTrigger / 255.0,
+            RightTrigger = gamepad.RightTrigger / 255.0,
             Timestamp = DateTimeOffset.Now,
             RawSummary = $"LT={gamepad.LeftTrigger}, RT={gamepad.RightTrigger}, Buttons={buttons}"
         };
@@ -96,5 +102,10 @@ public sealed class XInputControllerService
         {
             pressed.Add(name);
         }
+    }
+
+    private static double NormalizeThumb(short value)
+    {
+        return Math.Clamp(value / 32767.0, -1.0, 1.0);
     }
 }

@@ -1,0 +1,91 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style x:Key="AppSurfaceStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource CardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="22" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="StudioSurfaceStyle" TargetType="Border" BasedOn="{StaticResource AppSurfaceStyle}">
+        <Setter Property="CornerRadius" Value="28" />
+        <Setter Property="Padding" Value="18" />
+        <Setter Property="Background">
+            <Setter.Value>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#10FFFFFF" Offset="0" />
+                    <GradientStop Color="#00FFFFFF" Offset="0.45" />
+                    <GradientStop Color="#12000000" Offset="1" />
+                </LinearGradientBrush>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="GlassPanelStyle" TargetType="Border" BasedOn="{StaticResource AppSurfaceStyle}">
+        <Setter Property="CornerRadius" Value="24" />
+        <Setter Property="Padding" Value="16" />
+        <Setter Property="Opacity" Value="0.98" />
+    </Style>
+
+    <Style x:Key="DeviceCardStyle" TargetType="Border" BasedOn="{StaticResource AppSurfaceStyle}">
+        <Setter Property="CornerRadius" Value="20" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <Style x:Key="ProfileCardStyle" TargetType="Border" BasedOn="{StaticResource AppSurfaceStyle}">
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+    </Style>
+
+    <Style x:Key="ProfileChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource AccentSoftBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Padding" Value="11,7" />
+        <Setter Property="MinHeight" Value="34" />
+    </Style>
+
+    <Style x:Key="SettingsSectionStyle" TargetType="Border" BasedOn="{StaticResource AppSurfaceStyle}">
+        <Setter Property="CornerRadius" Value="20" />
+        <Setter Property="Padding" Value="18" />
+        <Setter Property="Margin" Value="0,0,0,14" />
+    </Style>
+
+    <Style x:Key="EmptyStateStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Padding" Value="18" />
+    </Style>
+
+    <Style x:Key="SegmentedControlStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource ChipBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+
+    <Style x:Key="SnackbarStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource TextPrimaryBrush}" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="Opacity" Value="0.94" />
+    </Style>
+
+    <Style x:Key="HeroMetricStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource InputBackgroundBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrushSoft}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="16" />
+        <Setter Property="Padding" Value="12,10" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="MinWidth" Value="120" />
+    </Style>
+</ResourceDictionary>

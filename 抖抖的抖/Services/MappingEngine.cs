@@ -36,7 +36,10 @@ public sealed class MappingEngine : IDisposable
     {
         lock (_mappingGate)
         {
-            _mappings = mappings.Select(x => x.Clone()).ToList();
+            _mappings = mappings
+                .Where(x => x.Target.IsMapped)
+                .Select(x => x.Clone())
+                .ToList();
         }
     }
 

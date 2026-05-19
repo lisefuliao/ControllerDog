@@ -34,8 +34,9 @@ public sealed class HidControllerService : IDisposable
                     return BuildCurrentState(out state, "HID 空闲");
                 }
 
-                _lastPressedButtons = NormalizeButtons(ParseButtons(buffer.AsSpan(0, length), _controllerType));
-                return BuildCurrentState(out state, $"HID Report {length} bytes");
+                var parsed = ParseButtons(buffer.AsSpan(0, length), _controllerType);
+                _lastPressedButtons = NormalizeButtons(parsed.PressedButtons);
+                return BuildCurrentState(out state, $"HID Report {length} bytes", parsed);
             }
             catch (TimeoutException)
             {
@@ -72,7 +73,7 @@ public sealed class HidControllerService : IDisposable
         return null;
     }
 
-    private bool BuildCurrentState(out ControllerState state, string summary)
+    private bool BuildCurrentState(out ControllerState state, string summary, ParsedControllerReport? parsed = null)
     {
         state = new ControllerState
         {
@@ -81,6 +82,12 @@ public sealed class HidControllerService : IDisposable
             ControllerType = _controllerType,
             InputMode = "HID",
             PressedButtons = new HashSet<string>(_lastPressedButtons, StringComparer.OrdinalIgnoreCase),
+            LeftStickX = parsed?.LeftStickX ?? 0,
+            LeftStickY = parsed?.LeftStickY ?? 0,
+            RightStickX = parsed?.RightStickX ?? 0,
+            RightStickY = parsed?.RightStickY ?? 0,
+            LeftTrigger = parsed?.LeftTrigger ?? 0,
+            RightTrigger = parsed?.RightTrigger ?? 0,
             Timestamp = DateTimeOffset.Now,
             RawSummary = summary
         };
@@ -154,7 +161,7 @@ public sealed class HidControllerService : IDisposable
         return ControllerType.None;
     }
 
-    private static HashSet<string> ParseButtons(ReadOnlySpan<byte> report, ControllerType type)
+    private static ParsedControllerReport ParseButtons(ReadOnlySpan<byte> report, ControllerType type)
     {
         return type switch
         {
@@ -172,19 +179,25 @@ public sealed class HidControllerService : IDisposable
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static HashSet<string> ParseDualShock4(ReadOnlySpan<byte> report)
+    private static ParsedControllerReport ParseDualShock4(ReadOnlySpan<byte> report)
     {
-        var pressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parsed = new ParsedControllerReport();
+        var pressed = parsed.PressedButtons;
         if (report.Length < 7)
         {
-            return pressed;
+            return parsed;
         }
 
         var offset = report[0] == 0x11 ? 2 : 0;
         if (report.Length <= offset + 6)
         {
-            return pressed;
+            return parsed;
         }
+
+        parsed.LeftStickX = NormalizeAxis(report[offset + 1]);
+        parsed.LeftStickY = NormalizeAxis(report[offset + 2]);
+        parsed.RightStickX = NormalizeAxis(report[offset + 3]);
+        parsed.RightStickY = NormalizeAxis(report[offset + 4]);
 
         var face = report[offset + 5];
         AddDPad(face, pressed);
@@ -210,22 +223,32 @@ public sealed class HidControllerService : IDisposable
             AddIf((system & 0x02) != 0, pressed, "Touchpad");
         }
 
-        return pressed;
+        return parsed;
     }
 
-    private static HashSet<string> ParseDualSense(ReadOnlySpan<byte> report)
+    private static ParsedControllerReport ParseDualSense(ReadOnlySpan<byte> report)
     {
-        var pressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parsed = new ParsedControllerReport();
+        var pressed = parsed.PressedButtons;
         if (report.Length < 10)
         {
-            return pressed;
+            return parsed;
         }
 
         var faceIndex = report[0] == 0x01 ? 8 : 9;
         var shoulderIndex = faceIndex + 1;
         if (report.Length <= shoulderIndex)
         {
-            return pressed;
+            return parsed;
+        }
+
+        var axisOffset = report[0] == 0x01 ? 1 : 2;
+        if (report.Length > axisOffset + 3)
+        {
+            parsed.LeftStickX = NormalizeAxis(report[axisOffset]);
+            parsed.LeftStickY = NormalizeAxis(report[axisOffset + 1]);
+            parsed.RightStickX = NormalizeAxis(report[axisOffset + 2]);
+            parsed.RightStickY = NormalizeAxis(report[axisOffset + 3]);
         }
 
         var face = report[faceIndex];
@@ -252,15 +275,16 @@ public sealed class HidControllerService : IDisposable
             AddIf((system & 0x02) != 0, pressed, "Touchpad");
         }
 
-        return pressed;
+        return parsed;
     }
 
-    private static HashSet<string> ParseGenericController(ReadOnlySpan<byte> report)
+    private static ParsedControllerReport ParseGenericController(ReadOnlySpan<byte> report)
     {
-        var pressed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var parsed = new ParsedControllerReport();
+        var pressed = parsed.PressedButtons;
         if (report.Length < 3)
         {
-            return pressed;
+            return parsed;
         }
 
         var buttonBytes = report[^Math.Min(3, report.Length)..];
@@ -278,7 +302,12 @@ public sealed class HidControllerService : IDisposable
             }
         }
 
-        return pressed;
+        return parsed;
+    }
+
+    private static double NormalizeAxis(byte value)
+    {
+        return Math.Clamp((value - 128.0) / 127.0, -1.0, 1.0);
     }
 
     private static void AddGenericButton(int bitIndex, ISet<string> pressed)
@@ -352,6 +381,23 @@ public sealed class HidControllerService : IDisposable
         {
             pressed.Add(name);
         }
+    }
+
+    private sealed class ParsedControllerReport
+    {
+        public HashSet<string> PressedButtons { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public double LeftStickX { get; set; }
+
+        public double LeftStickY { get; set; }
+
+        public double RightStickX { get; set; }
+
+        public double RightStickY { get; set; }
+
+        public double LeftTrigger { get; set; }
+
+        public double RightTrigger { get; set; }
     }
 
     private static string SafeGetProductName(HidDevice device)

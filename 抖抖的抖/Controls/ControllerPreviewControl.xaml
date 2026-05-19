@@ -6,7 +6,7 @@
              SnapsToDevicePixels="True">
     <Grid>
         <Viewbox Stretch="Uniform">
-            <Canvas x:Name="PreviewCanvas" Width="360" Height="230">
+            <Canvas x:Name="PreviewCanvas" Width="360" Height="230" Background="Transparent" Focusable="True">
                 <Image x:Name="ControllerImage"
                        Canvas.Left="0"
                        Canvas.Top="0"
@@ -17,5 +17,22 @@
                        RenderOptions.BitmapScalingMode="HighQuality" />
             </Canvas>
         </Viewbox>
+        <Border x:Name="CalibrationTools"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Bottom"
+                Margin="0,0,0,8"
+                Padding="8"
+                CornerRadius="12"
+                Background="{DynamicResource CardBrush}"
+                BorderBrush="{DynamicResource BorderBrushSoft}"
+                BorderThickness="1"
+                Visibility="Collapsed">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="保存" Style="{StaticResource TinyButtonStyle}" Click="OnSaveCurrentOverlayClick" Margin="0,0,6,0" />
+                <Button Content="导出当前" Style="{StaticResource TinyButtonStyle}" Click="OnExportCurrentOverlayClick" Margin="0,0,6,0" />
+                <Button Content="导出全部" Style="{StaticResource TinyButtonStyle}" Click="OnExportAllOverlaysClick" Margin="0,0,6,0" />
+                <Button Content="重置" Style="{StaticResource DangerButtonStyle}" Click="OnResetCurrentOverlayClick" />
+            </StackPanel>
+        </Border>
     </Grid>
 </UserControl>
